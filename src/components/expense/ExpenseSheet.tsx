@@ -496,6 +496,37 @@ function ExpenseForm({
 
       <InlineNewCategory onCreated={(id) => update({ category_id: id })} />
 
+      {layout === 'buy' && (
+        <button
+          type="button"
+          onClick={() => {
+            void (async () => {
+              if (timerRef.current) {
+                clearTimeout(timerRef.current)
+                timerRef.current = null
+              }
+              const current: ExpenseFormData = {
+                ...formRef.current,
+                status: 'planned',
+                who_paid: '',
+              }
+              let id = savedIdRef.current
+              if (id) {
+                await updateExpense({ id, form: current })
+                toast.success('Satt tilbake til planlagt')
+              } else if (isMeaningful(current)) {
+                await createExpense(current)
+                toast.success('Satt tilbake til planlagt')
+              }
+              onClose()
+            })()
+          }}
+          className="w-full text-sm text-muted font-medium py-2"
+        >
+          Sett tilbake til planlagt
+        </button>
+      )}
+
       {(layout === 'buy' || layout === 'convert') && (
         <>
           <button

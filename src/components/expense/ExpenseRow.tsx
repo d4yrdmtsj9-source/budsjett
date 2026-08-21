@@ -1,4 +1,4 @@
-import { MoreHorizontal, Copy, Trash2, Pencil, ShoppingBag } from 'lucide-react'
+import { MoreHorizontal, Copy, Trash2, Pencil, ShoppingBag, ClipboardList } from 'lucide-react'
 import { useState } from 'react'
 import { Card } from '@/components/ui/Card'
 import { StatusBadge } from '@/components/ui/Badge'
@@ -19,7 +19,7 @@ interface ExpenseRowProps {
 
 export function ExpenseRow({ expense, showRoom = true, showCategory = true }: ExpenseRowProps) {
   const { openEdit, openPurchase } = useExpenseSheet()
-  const { softDeleteExpense, duplicateExpense } = useExpenses()
+  const { softDeleteExpense, duplicateExpense, setExpenseStatus } = useExpenses()
   const { members } = useProject()
   const [menuOpen, setMenuOpen] = useState(false)
 
@@ -97,6 +97,21 @@ export function ExpenseRow({ expense, showRoom = true, showCategory = true }: Ex
               Kjøp
             </Button>
           )}
+          {isPurchase && (
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              className="h-8 px-2.5 text-xs"
+              onClick={(e) => {
+                e.stopPropagation()
+                setExpenseStatus.mutate({ id: expense.id, status: 'planned' })
+              }}
+            >
+              <ClipboardList className="h-3.5 w-3.5" />
+              Planlagt
+            </Button>
+          )}
           <div className="relative">
             <button
               type="button"
@@ -124,6 +139,16 @@ export function ExpenseRow({ expense, showRoom = true, showCategory = true }: Ex
                       onClick={() => {
                         setMenuOpen(false)
                         openPurchase(expense)
+                      }}
+                    />
+                  )}
+                  {isPurchase && (
+                    <MenuItem
+                      icon={ClipboardList}
+                      label="Sett til planlagt"
+                      onClick={() => {
+                        setMenuOpen(false)
+                        setExpenseStatus.mutate({ id: expense.id, status: 'planned' })
                       }}
                     />
                   )}

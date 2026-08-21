@@ -202,6 +202,37 @@ export function useExpenses(filters: ExpenseFilters = {}) {
     },
   })
 
+  const setExpenseStatus = useMutation({
+    mutationFn: async ({ id, status }: { id: string; status: ExpenseStatus }) => {
+      if (!rawProject) throw new Error('Ingen prosjekt')
+      const expense = rawProject.expenses.find((e) => e.id === id)
+      const next = {
+        ...rawProject,
+        expenses: rawProject.expenses.map((e) =>
+          e.id === id
+            ? {
+                ...e,
+                status,
+                who_paid: status === 'planned' ? null : e.who_paid,
+                updated_by: user?.id ?? null,
+                updated_at: new Date().toISOString(),
+              }
+            : e,
+        ),
+      }
+      const label = status === 'planned' ? 'planlagt' : 'kjøpt'
+      pushActivity(
+        next,
+        `${displayName ?? 'Noen'} satte ${expense?.description ?? 'utgift'} til ${label}`,
+        'expense_updated',
+      )
+      await setRawProject(next)
+    },
+    onSuccess: (_, { status }) => {
+      toast.success(status === 'planned' ? 'Satt tilbake til planlagt' : 'Registrert som kjøp')
+    },
+  })
+
   const duplicateExpense = useMutation({
     mutationFn: async (expense: Expense) => {
       if (!rawProject) throw new Error('Ingen prosjekt')
@@ -247,6 +278,7 @@ export function useExpenses(filters: ExpenseFilters = {}) {
     updateExpense,
     softDeleteExpense,
     duplicateExpense,
+    setExpenseStatus,
   }
 }
 
