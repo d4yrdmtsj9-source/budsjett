@@ -7,7 +7,6 @@ import { ExpenseSheetProvider } from '@/hooks/useExpenseSheet'
 import { AuthGate } from '@/pages/AuthPage'
 import { AppLayout } from '@/components/layout/AppLayout'
 import { DashboardPage } from '@/pages/DashboardPage'
-import { RoomsPage } from '@/pages/RoomsPage'
 import { RoomDetailPage } from '@/pages/RoomDetailPage'
 import { ExpensesPage } from '@/pages/ExpensesPage'
 import { SuppliersPage } from '@/pages/SuppliersPage'
@@ -34,7 +33,7 @@ export default function App() {
                 <Routes>
                   <Route element={<AppLayout />}>
                     <Route index element={<DashboardPage />} />
-                    <Route path="rom" element={<RoomsPage />} />
+                    <Route path="rom" element={<Navigate to="/" replace />} />
                     <Route path="rom/:roomId" element={<RoomDetailPage />} />
                     <Route path="utgifter" element={<ExpensesPage />} />
                     <Route path="leverandorer" element={<SuppliersPage />} />

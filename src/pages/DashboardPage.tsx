@@ -1,15 +1,17 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   TrendingDown,
   Wallet,
   PiggyBank,
   ArrowRight,
+  Plus,
 } from 'lucide-react'
 import { Card, CardHeader, CardTitle } from '@/components/ui/Card'
 import { ProgressBar } from '@/components/ui/ProgressBar'
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner'
 import { ExpenseList } from '@/components/expense/ExpenseRow'
+import { AddRoomSheet } from '@/components/room/AddRoomSheet'
 import { useProject } from '@/hooks/useProject'
 import { useExpenses } from '@/hooks/useExpenses'
 import { useRooms } from '@/hooks/useRooms'
@@ -26,6 +28,7 @@ export function DashboardPage() {
   const { project } = useProject()
   const { expenses, isLoading } = useExpenses()
   const { data: rooms } = useRooms()
+  const [showAddRoom, setShowAddRoom] = useState(false)
 
   const stats = useMemo(() => {
     const totalBudget = project?.total_budget ?? 0
@@ -111,9 +114,21 @@ export function DashboardPage() {
         )}
       </Card>
 
-      {byRoom.length > 0 && (
-        <section>
-          <SectionHeader title="Per rom" to="/rom" />
+      <section>
+        <CardHeader>
+          <CardTitle className="text-base">Per rom</CardTitle>
+          <button
+            type="button"
+            onClick={() => setShowAddRoom(true)}
+            className="text-sm text-primary flex items-center gap-1"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Nytt rom
+          </button>
+        </CardHeader>
+        {byRoom.length === 0 ? (
+          <p className="text-sm text-muted">Ingen rom ennå</p>
+        ) : (
           <div className="flex flex-col gap-3">
             {byRoom.map(({ room, spent }) => (
               <Link key={room.id} to={`/rom/${room.id}`} className="block">
@@ -129,8 +144,10 @@ export function DashboardPage() {
               </Link>
             ))}
           </div>
-        </section>
-      )}
+        )}
+      </section>
+
+      <AddRoomSheet open={showAddRoom} onClose={() => setShowAddRoom(false)} />
 
       <section>
         <SectionHeader title="Siste kjøp" to="/utgifter" />

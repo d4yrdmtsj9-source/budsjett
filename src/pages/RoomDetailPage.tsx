@@ -62,8 +62,8 @@ export function RoomDetailPage() {
     return (
       <div className="text-center py-12">
         <p className="text-muted">Rom ikke funnet</p>
-        <Link to="/rom" className="text-primary text-sm mt-2 inline-block">
-          Tilbake til rom
+        <Link to="/" className="text-primary text-sm mt-2 inline-block">
+          Tilbake til hjem
         </Link>
       </div>
     )
@@ -72,9 +72,9 @@ export function RoomDetailPage() {
   return (
     <div className="space-y-4 pb-4">
       <header>
-        <Link to="/rom" className="inline-flex items-center gap-1 text-sm text-muted mb-2">
+        <Link to="/" className="inline-flex items-center gap-1 text-sm text-muted mb-2">
           <ArrowLeft className="h-4 w-4" />
-          Rom
+          Hjem
         </Link>
         <div className="flex items-start justify-between">
           <div>
