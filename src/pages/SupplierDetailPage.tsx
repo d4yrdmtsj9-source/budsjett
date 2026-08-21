@@ -16,7 +16,7 @@ export function SupplierDetailPage() {
   if (!supplier) {
     return (
       <div className="text-center py-12">
-        <p className="text-muted">Leverandør ikke funnet</p>
+        <p className="text-muted">Butikk ikke funnet</p>
         <Link to="/leverandorer" className="text-primary text-sm mt-2 inline-block">
           Tilbake
         </Link>
@@ -35,7 +35,7 @@ export function SupplierDetailPage() {
           className="inline-flex items-center gap-1 text-sm text-muted mb-2"
         >
           <ArrowLeft className="h-4 w-4" />
-          Leverandører
+          Butikker
         </Link>
         <h1 className="font-display text-2xl font-bold">{supplier.name}</h1>
         <p className="text-sm text-muted">

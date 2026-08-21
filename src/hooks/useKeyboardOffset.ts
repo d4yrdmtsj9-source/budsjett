@@ -1,12 +1,8 @@
 import { useEffect, useState } from 'react'
 
 /**
- * How much of the layout viewport is covered by the software keyboard.
- * Ignores pinch-zoom (scale !== 1) so we don't fight Safari's zoom.
- *
- * When iOS scrolls the visual viewport on focus, we still report the gap
- * below the visible area so fixed sheets can sit above the keyboard —
- * without chasing offsetTop (that causes jumpiness).
+ * Keyboard inset from visualViewport height only.
+ * Does not touch window.scrollY — fighting page scroll made the app feel broken.
  */
 export function useKeyboardOffset(enabled = true) {
   const [offset, setOffset] = useState(0)
@@ -23,52 +19,28 @@ export function useKeyboardOffset(enabled = true) {
 
     const vv = window.visualViewport
     let frame = 0
-    let lastOffset = -1
-    let lastHeight = -1
 
     const update = () => {
       cancelAnimationFrame(frame)
       frame = requestAnimationFrame(() => {
-        if (!vv) {
+        if (!vv || vv.scale > 1.01) {
           setOffset(0)
-          setViewportHeight(window.innerHeight)
+          setViewportHeight(Math.round(vv?.height ?? window.innerHeight))
           return
         }
-        // Pinch-zoom makes offset math wrong — don't lift UI while zoomed
-        if (vv.scale > 1.01) {
-          setOffset(0)
-          setViewportHeight(Math.round(vv.height))
-          return
-        }
-
-        // Prefer height-based coverage. Including offsetTop double-counts when
-        // Safari scrolls the visual viewport to follow a focused input.
         const covered = Math.max(0, Math.round(window.innerHeight - vv.height))
-        const height = Math.round(vv.height)
-
-        // Ignore 1–2px jitter from the keyboard animation.
-        if (Math.abs(covered - lastOffset) < 3 && Math.abs(height - lastHeight) < 3) {
-          return
-        }
-        lastOffset = covered
-        lastHeight = height
         setOffset(covered)
-        setViewportHeight(height)
-
-        // Undo focus-driven page scroll; sheet handles its own scrolling.
-        if (window.scrollY !== 0) window.scrollTo(0, 0)
+        setViewportHeight(Math.round(vv.height))
       })
     }
 
     update()
     vv?.addEventListener('resize', update)
-    vv?.addEventListener('scroll', update)
     window.addEventListener('resize', update)
 
     return () => {
       cancelAnimationFrame(frame)
       vv?.removeEventListener('resize', update)
-      vv?.removeEventListener('scroll', update)
       window.removeEventListener('resize', update)
     }
   }, [enabled])

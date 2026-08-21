@@ -14,17 +14,17 @@ export function SuppliersPage() {
   return (
     <div className="space-y-4 pb-4">
       <header>
-        <h1 className="font-display text-2xl font-bold">Leverandører</h1>
+        <h1 className="font-display text-2xl font-bold">Butikker</h1>
         <p className="text-sm text-muted">
-          {suppliers.length} leverandør{suppliers.length !== 1 ? 'er' : ''}
+          {suppliers.length} butikk{suppliers.length !== 1 ? 'er' : ''}
         </p>
       </header>
 
       {suppliers.length === 0 ? (
         <EmptyState
           icon={Truck}
-          title="Ingen leverandører ennå"
-          description="Leverandører vises automatisk når du legger til utgifter med leverandørnavn"
+          title="Ingen butikker ennå"
+          description="Butikker vises automatisk når du legger inn butikknavn på plan eller kjøp"
         />
       ) : (
         <div className="space-y-3">

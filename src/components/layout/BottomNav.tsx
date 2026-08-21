@@ -7,7 +7,7 @@ const navItems = [
   { to: '/', icon: Home, label: 'Hjem' },
   { to: '/rom', icon: DoorOpen, label: 'Rom' },
   { to: '/utgifter', icon: Receipt, label: 'Utgifter' },
-  { to: '/leverandorer', icon: Truck, label: 'Leverandører' },
+  { to: '/leverandorer', icon: Truck, label: 'Butikker' },
   { to: '/innstillinger', icon: Settings, label: 'Innstillinger' },
 ]
 

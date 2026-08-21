@@ -52,7 +52,7 @@ export function ExpenseRow({ expense, showRoom = true, showCategory = true }: Ex
                 {showCategory && expense.category && (
                   <span className="text-xs text-muted">· {expense.category.name}</span>
                 )}
-                {isPurchase && expense.supplier && (
+                {expense.supplier && (
                   <span className="text-xs text-muted">· {expense.supplier}</span>
                 )}
                 {isPurchase && paidByName && (

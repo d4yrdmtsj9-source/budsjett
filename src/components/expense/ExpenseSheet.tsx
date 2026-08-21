@@ -185,7 +185,7 @@ export function ExpenseSheet() {
       discount_percent: null,
       discount_amount: null,
       notes: '',
-      supplier: isBuyLike ? (prefs.supplier ?? '') : '',
+      supplier: prefs.supplier ?? '',
       expense_date: new Date().toISOString().split('T')[0],
       status: isBuyLike ? 'purchased' : 'planned',
       who_paid: isBuyLike ? (memberId ?? prefs.who_paid ?? '') : '',
@@ -407,7 +407,7 @@ function ExpenseForm({
         e.preventDefault()
         void flushAndClose()
       }}
-      className="space-y-4 pb-28"
+      className="space-y-4 pb-8"
     >
       <p className="text-xs text-muted -mt-1">{saveLabel}</p>
 
@@ -453,6 +453,13 @@ function ExpenseForm({
         </div>
       )}
 
+      <Input
+        label="Butikk"
+        value={form.supplier}
+        onChange={(e) => update({ supplier: e.target.value })}
+        placeholder="F.eks. Byggmakker"
+      />
+
       {(layout === 'buy' || layout === 'convert') && (
         <>
           <div className="rounded-xl bg-primary/5 border border-primary/10 p-4">
@@ -471,13 +478,6 @@ function ExpenseForm({
               <span className="text-primary">{formatNOK(total)}</span>
             </div>
           </div>
-
-          <Input
-            label="Leverandør"
-            value={form.supplier}
-            onChange={(e) => update({ supplier: e.target.value })}
-            placeholder="F.eks. Byggmakker"
-          />
 
           <Select
             label="Betalt av"
