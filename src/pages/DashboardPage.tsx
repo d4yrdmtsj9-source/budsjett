@@ -65,12 +65,16 @@ export function DashboardPage() {
     })
   }, [categories, expenses])
 
-  const recentExpenses = useMemo(
-    () => [...expenses].sort((a, b) => {
-      const da = a.expense_date ?? a.created_at
-      const db = b.expense_date ?? b.created_at
-      return db.localeCompare(da)
-    }).slice(0, 5),
+  const recentPurchases = useMemo(
+    () =>
+      [...expenses]
+        .filter((e) => e.status === 'purchased' || e.status === 'paid')
+        .sort((a, b) => {
+          const da = a.expense_date ?? a.created_at
+          const db = b.expense_date ?? b.created_at
+          return db.localeCompare(da)
+        })
+        .slice(0, 5),
     [expenses],
   )
 
@@ -166,8 +170,8 @@ export function DashboardPage() {
       )}
 
       <section>
-        <SectionHeader title="Siste utgifter" to="/utgifter" />
-        <ExpenseList expenses={recentExpenses} />
+        <SectionHeader title="Siste kjøp" to="/utgifter" />
+        <ExpenseList expenses={recentPurchases} emptyMessage="Ingen kjøp ennå" />
       </section>
 
       {largestExpenses.length > 0 && (

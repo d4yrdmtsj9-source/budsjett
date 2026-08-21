@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { Upload, ChevronDown, ChevronUp } from 'lucide-react'
 import { Sheet } from '@/components/ui/Sheet'
@@ -23,11 +23,14 @@ import { formatNOK } from '@/lib/format'
 import {
   EXPENSE_STATUS_LABELS,
   DEFAULT_UNITS,
+  type Expense,
   type ExpenseFormData,
   type ExpenseStatus,
 } from '@/lib/types'
+import type { LocalExpense } from '@/lib/localStore'
 
 const PREFS_KEY = 'renover-expense-prefs'
+const AUTOSAVE_MS = 400
 
 function loadPrefs(): Partial<ExpenseFormData> {
   try {
@@ -51,15 +54,40 @@ function savePrefs(form: ExpenseFormData) {
   )
 }
 
+function isMeaningful(form: ExpenseFormData) {
+  return (
+    form.description.trim().length > 0 ||
+    form.unit_price > 0 ||
+    (form.total_override != null && form.total_override > 0) ||
+    !!form.supplier.trim() ||
+    !!form.notes.trim()
+  )
+}
+
+function toExpenseView(local: LocalExpense): Expense {
+  return {
+    ...local,
+    project_id: '',
+    unit: local.unit,
+  }
+}
+
 export function ExpenseSheet() {
-  const { isOpen, editingExpense, defaultRoomId, close } = useExpenseSheet()
-  const { createExpense, updateExpense } = useExpenses()
+  const {
+    isOpen,
+    editingExpense,
+    defaultRoomId,
+    defaultStatus,
+    mode,
+    focusField,
+    setEditingExpense,
+    close,
+  } = useExpenseSheet()
+  const { createExpense, updateExpense, softDeleteExpense } = useExpenses()
   const { data: rooms } = useRooms()
   const { data: categories } = useCategories()
   const { project, members } = useProject()
-  const { user } = useAuth()
-
-  const isEditing = !!editingExpense
+  const { user, memberId } = useAuth()
 
   const statusOptions = Object.entries(EXPENSE_STATUS_LABELS).map(([value, label]) => ({
     value,
@@ -74,62 +102,71 @@ export function ExpenseSheet() {
   }))
 
   const prefs = loadPrefs()
-  const initialForm = editingExpense
-    ? expenseToForm(editingExpense)
-    : {
-        ...defaultExpenseForm(),
-        ...prefs,
-        room_id: defaultRoomId ?? prefs.room_id ?? null,
-        description: '',
-        quantity: 1,
-        unit_price: 0,
-        total_override: null,
-        discount_percent: null,
-        discount_amount: null,
-        notes: '',
-        expense_date: new Date().toISOString().split('T')[0],
-      }
+  const isPurchase = mode === 'purchase' || defaultStatus === 'purchased'
 
-  const handleSubmit = async (form: ExpenseFormData, receiptFile: File | null) => {
-    if (!form.description.trim()) {
-      toast.error('Beskrivelse er påkrevd')
-      return
+  let initialForm: ExpenseFormData
+  if (editingExpense) {
+    initialForm = expenseToForm(editingExpense)
+    if (mode === 'purchase') {
+      initialForm = {
+        ...initialForm,
+        status: 'purchased',
+        who_paid: memberId ?? initialForm.who_paid,
+      }
     }
-
-    try {
-      if (isEditing && editingExpense) {
-        await updateExpense.mutateAsync({ id: editingExpense.id, form })
-        toast.success('Utgift oppdatert')
-      } else {
-        const created = await createExpense.mutateAsync(form)
-        if (receiptFile && created?.id && project?.id) {
-          await uploadReceipt(created.id, receiptFile, project.id, user?.id)
-        }
-        toast.success('Utgift lagt til')
-      }
-      savePrefs(form)
-      close()
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Noe gikk galt')
+  } else {
+    initialForm = {
+      ...defaultExpenseForm(),
+      ...prefs,
+      room_id: defaultRoomId ?? prefs.room_id ?? null,
+      description: '',
+      quantity: 1,
+      unit_price: 0,
+      total_override: null,
+      discount_percent: null,
+      discount_amount: null,
+      notes: '',
+      expense_date: new Date().toISOString().split('T')[0],
+      status: defaultStatus,
+      who_paid: isPurchase ? (memberId ?? prefs.who_paid ?? '') : (prefs.who_paid ?? ''),
     }
   }
 
+  const flushCloseRef = useRef<() => void>(() => close())
+
+  const title =
+    mode === 'purchase'
+      ? 'Registrer kjøp'
+      : editingExpense
+        ? 'Rediger utgift'
+        : defaultStatus === 'purchased'
+          ? 'Nytt kjøp'
+          : 'Ny planlagt'
+
   return (
-    <Sheet
-      open={isOpen}
-      onClose={close}
-      title={isEditing ? 'Rediger utgift' : 'Legg til utgift'}
-    >
+    <Sheet open={isOpen} onClose={() => flushCloseRef.current()} title={title}>
       {isOpen && (
         <ExpenseForm
-          key={editingExpense?.id ?? defaultRoomId ?? 'new'}
+          key={`${editingExpense?.id ?? 'new'}-${mode}-${defaultStatus}-${focusField}`}
           initial={initialForm}
-          onSubmit={handleSubmit}
-          isEditing={isEditing}
+          expenseId={editingExpense?.id ?? null}
+          focusField={focusField}
+          isPurchaseLayout={isPurchase}
           roomOptions={roomOptions}
           categoryOptions={categoryOptions}
           memberOptions={memberOptions}
           statusOptions={statusOptions}
+          projectId={project?.id}
+          userId={user?.id}
+          onCreated={(expense) => setEditingExpense(toExpenseView(expense))}
+          onClose={close}
+          registerCloseHandler={(fn) => {
+            flushCloseRef.current = fn
+          }}
+          createExpense={(form) => createExpense.mutateAsync(form)}
+          updateExpense={(args) => updateExpense.mutateAsync(args)}
+          softDeleteExpense={(args) => softDeleteExpense.mutateAsync(args)}
+          uploadReceipt={uploadReceipt}
         />
       )}
     </Sheet>
@@ -138,54 +175,174 @@ export function ExpenseSheet() {
 
 function ExpenseForm({
   initial,
-  onSubmit,
-  isEditing,
+  expenseId,
+  focusField,
+  isPurchaseLayout,
   roomOptions,
   categoryOptions,
   memberOptions,
   statusOptions,
+  projectId,
+  userId,
+  onCreated,
+  onClose,
+  registerCloseHandler,
+  createExpense,
+  updateExpense,
+  softDeleteExpense,
+  uploadReceipt,
 }: {
   initial: ExpenseFormData
-  onSubmit: (form: ExpenseFormData, receipt: File | null) => Promise<void>
-  isEditing: boolean
+  expenseId: string | null
+  focusField: 'description' | 'unit_price'
+  isPurchaseLayout: boolean
   roomOptions: { value: string; label: string }[]
   categoryOptions: { value: string; label: string }[]
   memberOptions: { value: string; label: string }[]
   statusOptions: { value: string; label: string }[]
+  projectId?: string
+  userId?: string
+  onCreated: (expense: LocalExpense) => void
+  onClose: () => void
+  registerCloseHandler: (fn: () => void) => void
+  createExpense: (form: ExpenseFormData) => Promise<LocalExpense>
+  updateExpense: (args: {
+    id: string
+    form: ExpenseFormData
+    quiet?: boolean
+  }) => Promise<unknown>
+  softDeleteExpense: (id: string | { id: string; quiet?: boolean }) => Promise<unknown>
+  uploadReceipt: (
+    expenseId: string,
+    file: File,
+    projectId: string,
+    userId?: string,
+  ) => Promise<unknown>
 }) {
   const [form, setForm] = useState<ExpenseFormData>(initial)
-  const [showAdvanced, setShowAdvanced] = useState(false)
+  const [savedId, setSavedId] = useState<string | null>(expenseId)
+  const [showAdvanced, setShowAdvanced] = useState(isPurchaseLayout)
   const [showDiscount, setShowDiscount] = useState(
-    !!(initial.discount_percent || initial.discount_amount),
+    isPurchaseLayout || !!(initial.discount_percent || initial.discount_amount),
   )
-  const [saving, setSaving] = useState(false)
+  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle')
   const [receiptFile, setReceiptFile] = useState<File | null>(null)
+  const descRef = useRef<HTMLInputElement>(null)
+  const priceRef = useRef<HTMLInputElement>(null)
+  const formRef = useRef(form)
+  const savedIdRef = useRef(savedId)
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const creatingRef = useRef(false)
 
-  const update = (patch: Partial<ExpenseFormData>) => setForm((f) => ({ ...f, ...patch }))
+  formRef.current = form
+  savedIdRef.current = savedId
+
+  useEffect(() => {
+    const t = window.setTimeout(() => {
+      if (focusField === 'unit_price') priceRef.current?.focus()
+      else descRef.current?.focus()
+    }, 50)
+    return () => clearTimeout(t)
+  }, [focusField])
+
+  const persist = async (nextForm: ExpenseFormData, id: string | null) => {
+    if (!isMeaningful(nextForm) && !id) return id
+    setSaveState('saving')
+    try {
+      if (!id) {
+        if (creatingRef.current) return id
+        creatingRef.current = true
+        const created = await createExpense(nextForm)
+        creatingRef.current = false
+        setSavedId(created.id)
+        onCreated(created as Awaited<ReturnType<typeof createExpense>>)
+        savePrefs(nextForm)
+        setSaveState('saved')
+        return created.id
+      }
+      await updateExpense({ id, form: nextForm, quiet: true })
+      savePrefs(nextForm)
+      setSaveState('saved')
+      return id
+    } catch (err) {
+      creatingRef.current = false
+      setSaveState('idle')
+      toast.error(err instanceof Error ? err.message : 'Kunne ikke lagre')
+      return id
+    }
+  }
+
+  const scheduleSave = (nextForm: ExpenseFormData) => {
+    if (timerRef.current) clearTimeout(timerRef.current)
+    timerRef.current = setTimeout(() => {
+      void persist(nextForm, savedIdRef.current)
+    }, AUTOSAVE_MS)
+  }
+
+  const update = (patch: Partial<ExpenseFormData>) => {
+    setForm((f) => {
+      const next = { ...f, ...patch }
+      formRef.current = next
+      scheduleSave(next)
+      return next
+    })
+    setSaveState((s) => (s === 'saved' ? 'idle' : s))
+  }
+
+  const flushAndClose = async () => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current)
+      timerRef.current = null
+    }
+    const current = formRef.current
+    let id = savedIdRef.current
+    if (isMeaningful(current)) {
+      id = await persist(current, id)
+      if (receiptFile && id && projectId) {
+        await uploadReceipt(id, receiptFile, projectId, userId)
+      }
+    } else if (id) {
+      // Empty draft — remove so it doesn't clutter the list
+      await softDeleteExpense({ id, quiet: true })
+    }
+    onClose()
+  }
+
+  useEffect(() => {
+    registerCloseHandler(() => {
+      void flushAndClose()
+    })
+  })
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current)
+    }
+  }, [])
 
   const subtotal = calculateSubtotal(form.quantity, form.unit_price)
   const discount = calculateDiscount(subtotal, form.discount_percent, form.discount_amount)
   const total = calculateTotal(form)
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setSaving(true)
-    try {
-      await onSubmit(form, receiptFile)
-    } finally {
-      setSaving(false)
-    }
-  }
+  const saveLabel =
+    saveState === 'saving' ? 'Lagrer…' : saveState === 'saved' ? 'Lagret' : 'Endringer lagres automatisk'
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4 pb-6">
+    <form
+      onSubmit={(e) => {
+        e.preventDefault()
+        void flushAndClose()
+      }}
+      className="space-y-4 pb-6"
+    >
+      <p className="text-xs text-muted -mt-1">{saveLabel}</p>
+
       <Input
+        ref={descRef}
         label="Beskrivelse"
-        value={form.description}
+        value={form.description === 'Uten tittel' ? '' : form.description}
         onChange={(e) => update({ description: e.target.value })}
         placeholder="F.eks. Parkett eik"
-        autoFocus
-        required
       />
 
       <div className="grid grid-cols-3 gap-3">
@@ -204,6 +361,7 @@ function ExpenseForm({
           options={DEFAULT_UNITS.map((u) => ({ value: u, label: u }))}
         />
         <Input
+          ref={priceRef}
           label="Pris/enhet"
           type="number"
           min={0}
@@ -230,6 +388,24 @@ function ExpenseForm({
         </div>
       </div>
 
+      {isPurchaseLayout && (
+        <>
+          <Select
+            label="Betalt av"
+            value={form.who_paid}
+            onChange={(e) => update({ who_paid: e.target.value })}
+            options={memberOptions}
+            placeholder="Velg person"
+          />
+          <Input
+            label="Leverandør"
+            value={form.supplier}
+            onChange={(e) => update({ supplier: e.target.value })}
+            placeholder="F.eks. Byggmakker"
+          />
+        </>
+      )}
+
       <Select
         label="Status"
         value={form.status}
@@ -253,9 +429,7 @@ function ExpenseForm({
         placeholder="Velg kategori"
       />
 
-      <InlineNewCategory
-        onCreated={(id) => update({ category_id: id })}
-      />
+      <InlineNewCategory onCreated={(id) => update({ category_id: id })} />
 
       <button
         type="button"
@@ -307,25 +481,29 @@ function ExpenseForm({
 
       {showAdvanced && (
         <div className="space-y-4 pl-2 border-l-2 border-primary/20">
-          <Input
-            label="Leverandør"
-            value={form.supplier}
-            onChange={(e) => update({ supplier: e.target.value })}
-            placeholder="F.eks. Byggmakker"
-          />
+          {!isPurchaseLayout && (
+            <Input
+              label="Leverandør"
+              value={form.supplier}
+              onChange={(e) => update({ supplier: e.target.value })}
+              placeholder="F.eks. Byggmakker"
+            />
+          )}
           <Input
             label="Dato"
             type="date"
             value={form.expense_date}
             onChange={(e) => update({ expense_date: e.target.value })}
           />
-          <Select
-            label="Betalt av"
-            value={form.who_paid}
-            onChange={(e) => update({ who_paid: e.target.value })}
-            options={memberOptions}
-            placeholder="Velg person"
-          />
+          {!isPurchaseLayout && (
+            <Select
+              label="Betalt av"
+              value={form.who_paid}
+              onChange={(e) => update({ who_paid: e.target.value })}
+              options={memberOptions}
+              placeholder="Velg person"
+            />
+          )}
           <Input
             label="Overstyr total"
             type="number"
@@ -342,30 +520,28 @@ function ExpenseForm({
             onChange={(e) => update({ notes: e.target.value })}
             placeholder="Ekstra info..."
           />
-          {!isEditing && (
-            <div>
-              <label className="block text-sm font-medium text-muted-foreground mb-1.5">
-                Kvittering
-              </label>
-              <label className="flex items-center gap-3 h-11 px-4 rounded-xl border border-dashed border-border bg-white/50 cursor-pointer hover:bg-white/80 transition-colors">
-                <Upload className="h-4 w-4 text-muted" />
-                <span className="text-sm text-muted truncate">
-                  {receiptFile ? receiptFile.name : 'Last opp kvittering'}
-                </span>
-                <input
-                  type="file"
-                  accept="image/*,.pdf"
-                  className="hidden"
-                  onChange={(e) => setReceiptFile(e.target.files?.[0] ?? null)}
-                />
-              </label>
-            </div>
-          )}
+          <div>
+            <label className="block text-sm font-medium text-muted-foreground mb-1.5">
+              Kvittering
+            </label>
+            <label className="flex items-center gap-3 h-11 px-4 rounded-xl border border-dashed border-border bg-white/50 cursor-pointer hover:bg-white/80 transition-colors">
+              <Upload className="h-4 w-4 text-muted" />
+              <span className="text-sm text-muted truncate">
+                {receiptFile ? receiptFile.name : 'Last opp kvittering'}
+              </span>
+              <input
+                type="file"
+                accept="image/*,.pdf"
+                className="hidden"
+                onChange={(e) => setReceiptFile(e.target.files?.[0] ?? null)}
+              />
+            </label>
+          </div>
         </div>
       )}
 
-      <Button type="submit" size="lg" className="w-full" disabled={saving}>
-        {saving ? 'Lagrer...' : isEditing ? 'Oppdater utgift' : 'Legg til utgift'}
+      <Button type="submit" size="lg" className="w-full">
+        Ferdig
       </Button>
     </form>
   )

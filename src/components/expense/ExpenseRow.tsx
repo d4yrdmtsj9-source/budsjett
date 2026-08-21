@@ -1,7 +1,8 @@
-import { MoreHorizontal, Copy, Trash2, Pencil } from 'lucide-react'
+import { MoreHorizontal, Copy, Trash2, Pencil, ShoppingBag } from 'lucide-react'
 import { useState } from 'react'
 import { Card } from '@/components/ui/Card'
 import { StatusBadge } from '@/components/ui/Badge'
+import { Button } from '@/components/ui/Button'
 import { useExpenseSheet } from '@/hooks/useExpenseSheet'
 import { useExpenses } from '@/hooks/useExpenses'
 import { getExpenseTotal } from '@/lib/calc'
@@ -16,19 +17,17 @@ interface ExpenseRowProps {
 }
 
 export function ExpenseRow({ expense, showRoom = true, showCategory = true }: ExpenseRowProps) {
-  const { openEdit } = useExpenseSheet()
+  const { openEdit, openPurchase } = useExpenseSheet()
   const { softDeleteExpense, duplicateExpense } = useExpenses()
   const [menuOpen, setMenuOpen] = useState(false)
 
   const total = getExpenseTotal(expense)
+  const canPurchase = expense.status === 'planned' || expense.status === 'quoted'
 
   return (
     <Card padding="sm" className="relative">
-      <div className="flex items-start gap-3">
-        <button
-          onClick={() => openEdit(expense)}
-          className="flex-1 text-left min-w-0"
-        >
+      <div className="flex items-start gap-2">
+        <button onClick={() => openEdit(expense)} className="flex-1 text-left min-w-0">
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
               <p className="font-medium text-sm truncate">{expense.description}</p>
@@ -56,45 +55,73 @@ export function ExpenseRow({ expense, showRoom = true, showCategory = true }: Ex
           </div>
         </button>
 
-        <div className="relative">
-          <button
-            onClick={() => setMenuOpen(!menuOpen)}
-            className="h-9 w-9 rounded-lg flex items-center justify-center hover:bg-black/5"
-          >
-            <MoreHorizontal className="h-4 w-4" />
-          </button>
-          {menuOpen && (
-            <>
-              <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
-              <div className="absolute right-0 top-full mt-1 z-20 w-40 rounded-xl bg-white shadow-lg border border-border py-1 animate-fade-in">
-                <MenuItem
-                  icon={Pencil}
-                  label="Rediger"
-                  onClick={() => {
-                    setMenuOpen(false)
-                    openEdit(expense)
-                  }}
-                />
-                <MenuItem
-                  icon={Copy}
-                  label="Dupliser"
-                  onClick={() => {
-                    setMenuOpen(false)
-                    duplicateExpense.mutate(expense)
-                  }}
-                />
-                <MenuItem
-                  icon={Trash2}
-                  label="Slett"
-                  destructive
-                  onClick={() => {
-                    setMenuOpen(false)
-                    softDeleteExpense.mutate(expense.id)
-                  }}
-                />
-              </div>
-            </>
+        <div className="flex flex-col items-end gap-1 shrink-0">
+          {canPurchase && (
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              className="h-8 px-2.5 text-xs"
+              onClick={(e) => {
+                e.stopPropagation()
+                openPurchase(expense)
+              }}
+            >
+              <ShoppingBag className="h-3.5 w-3.5" />
+              Kjøpt
+            </Button>
           )}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setMenuOpen(!menuOpen)}
+              className="h-9 w-9 rounded-lg flex items-center justify-center hover:bg-black/5"
+            >
+              <MoreHorizontal className="h-4 w-4" />
+            </button>
+            {menuOpen && (
+              <>
+                <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
+                <div className="absolute right-0 top-full mt-1 z-20 w-40 rounded-xl bg-white shadow-lg border border-border py-1 animate-fade-in">
+                  <MenuItem
+                    icon={Pencil}
+                    label="Rediger"
+                    onClick={() => {
+                      setMenuOpen(false)
+                      openEdit(expense)
+                    }}
+                  />
+                  {canPurchase && (
+                    <MenuItem
+                      icon={ShoppingBag}
+                      label="Registrer kjøp"
+                      onClick={() => {
+                        setMenuOpen(false)
+                        openPurchase(expense)
+                      }}
+                    />
+                  )}
+                  <MenuItem
+                    icon={Copy}
+                    label="Dupliser"
+                    onClick={() => {
+                      setMenuOpen(false)
+                      duplicateExpense.mutate(expense)
+                    }}
+                  />
+                  <MenuItem
+                    icon={Trash2}
+                    label="Slett"
+                    destructive
+                    onClick={() => {
+                      setMenuOpen(false)
+                      softDeleteExpense.mutate(expense.id)
+                    }}
+                  />
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </div>
     </Card>
@@ -114,6 +141,7 @@ function MenuItem({
 }) {
   return (
     <button
+      type="button"
       onClick={onClick}
       className={cn(
         'w-full flex items-center gap-2 px-3 py-2.5 text-sm hover:bg-black/5 transition-colors',
@@ -138,9 +166,7 @@ export function ExpenseList({
   emptyMessage?: string
 }) {
   if (expenses.length === 0) {
-    return (
-      <p className="text-sm text-muted text-center py-8">{emptyMessage}</p>
-    )
+    return <p className="text-sm text-muted text-center py-8">{emptyMessage}</p>
   }
 
   return (

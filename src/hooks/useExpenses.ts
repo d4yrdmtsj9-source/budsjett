@@ -71,7 +71,7 @@ export function useExpenses(filters: ExpenseFilters = {}) {
       const now = new Date().toISOString()
       const expense: LocalExpense = {
         id: uid(),
-        description: form.description.trim(),
+        description: form.description.trim() || 'Uten tittel',
         room_id: form.room_id,
         category_id: form.category_id,
         quantity: form.quantity,
@@ -107,16 +107,25 @@ export function useExpenses(filters: ExpenseFilters = {}) {
   })
 
   const updateExpense = useMutation({
-    mutationFn: async ({ id, form }: { id: string; form: ExpenseFormData }) => {
+    mutationFn: async ({
+      id,
+      form,
+      quiet,
+    }: {
+      id: string
+      form: ExpenseFormData
+      quiet?: boolean
+    }) => {
       if (!rawProject) throw new Error('Ingen prosjekt')
       const total = calculateTotal(form)
+      const prev = rawProject.expenses.find((e) => e.id === id)
       const next = {
         ...rawProject,
         expenses: rawProject.expenses.map((e) =>
           e.id === id
             ? {
                 ...e,
-                description: form.description.trim(),
+                description: form.description.trim() || e.description || 'Uten tittel',
                 room_id: form.room_id,
                 category_id: form.category_id,
                 quantity: form.quantity,
@@ -137,33 +146,43 @@ export function useExpenses(filters: ExpenseFilters = {}) {
             : e,
         ),
       }
-      pushActivity(next, `${displayName ?? 'Noen'} oppdaterte ${form.description}`, 'expense_updated')
+      if (!quiet || (prev && prev.status !== form.status)) {
+        pushActivity(
+          next,
+          `${displayName ?? 'Noen'} oppdaterte ${form.description.trim() || 'utgift'}`,
+          'expense_updated',
+        )
+      }
       await setRawProject(next)
     },
   })
 
   const softDeleteExpense = useMutation({
-    mutationFn: async (id: string) => {
+    mutationFn: async (input: string | { id: string; quiet?: boolean }) => {
+      const opts = typeof input === 'string' ? { id: input, quiet: false } : input
       if (!rawProject) throw new Error('Ingen prosjekt')
       const projectId = rawProject.id
-      const expense = rawProject.expenses.find((e) => e.id === id)
+      const expense = rawProject.expenses.find((e) => e.id === opts.id)
       const next = {
         ...rawProject,
         expenses: rawProject.expenses.map((e) =>
-          e.id === id
+          e.id === opts.id
             ? { ...e, deleted_at: new Date().toISOString(), updated_by: user?.id ?? null }
             : e,
         ),
       }
-      pushActivity(
-        next,
-        `${displayName ?? 'Noen'} slettet ${expense?.description ?? 'utgift'}`,
-        'expense_deleted',
-      )
+      if (!opts.quiet) {
+        pushActivity(
+          next,
+          `${displayName ?? 'Noen'} slettet ${expense?.description ?? 'utgift'}`,
+          'expense_deleted',
+        )
+      }
       await setRawProject(next)
-      return { id, projectId }
+      return { id: opts.id, projectId, quiet: !!opts.quiet }
     },
-    onSuccess: ({ id, projectId }) => {
+    onSuccess: ({ id, projectId, quiet }) => {
+      if (quiet) return
       toast('Utgift slettet', {
         action: {
           label: 'Angre',

@@ -7,12 +7,12 @@ interface SheetProps {
   open: boolean
   onClose: () => void
   title: string
+  subtitle?: string
   children: ReactNode
 }
 
-export function Sheet({ open, onClose, title, children }: SheetProps) {
+export function Sheet({ open, onClose, title, subtitle, children }: SheetProps) {
   const panelRef = useRef<HTMLDivElement>(null)
-  const bodyRef = useRef<HTMLDivElement>(null)
   const { offset, viewportHeight, keyboardOpen } = useKeyboardOffset(open)
 
   useEffect(() => {
@@ -24,27 +24,6 @@ export function Sheet({ open, onClose, title, children }: SheetProps) {
     return () => {
       document.body.style.overflow = ''
     }
-  }, [open])
-
-  // Scroll only inside the sheet — avoid page-level scrollIntoView (causes iOS jump/zoom feel)
-  useEffect(() => {
-    if (!open) return
-    const onFocusIn = (e: FocusEvent) => {
-      const target = e.target
-      if (!(target instanceof HTMLElement)) return
-      if (!target.matches('input, textarea, select')) return
-      const scroller = bodyRef.current
-      if (!scroller || !scroller.contains(target)) return
-      window.setTimeout(() => {
-        const scrollerRect = scroller.getBoundingClientRect()
-        const targetRect = target.getBoundingClientRect()
-        const delta =
-          targetRect.top - scrollerRect.top - scrollerRect.height / 2 + targetRect.height / 2
-        scroller.scrollTop += delta
-      }, 50)
-    }
-    document.addEventListener('focusin', onFocusIn)
-    return () => document.removeEventListener('focusin', onFocusIn)
   }, [open])
 
   if (!open) return null
@@ -71,22 +50,22 @@ export function Sheet({ open, onClose, title, children }: SheetProps) {
         style={{
           bottom: offset,
           maxHeight,
-          // No CSS transition on bottom — transitions + keyboard = jumpy iOS UX
         }}
       >
         <div className="flex items-center justify-between px-5 py-4 border-b border-border/50 shrink-0">
-          <h2 className="font-display text-xl font-semibold">{title}</h2>
+          <div className="min-w-0">
+            <h2 className="font-display text-xl font-semibold truncate">{title}</h2>
+            {subtitle && <p className="text-xs text-muted mt-0.5">{subtitle}</p>}
+          </div>
           <button
             type="button"
             onClick={onClose}
-            className="h-10 w-10 rounded-full flex items-center justify-center hover:bg-black/5 transition-colors"
+            className="h-10 w-10 rounded-full flex items-center justify-center hover:bg-black/5 transition-colors shrink-0"
           >
             <X className="h-5 w-5" />
           </button>
         </div>
-        <div ref={bodyRef} className="overflow-y-auto overscroll-contain flex-1 px-5 py-4">
-          {children}
-        </div>
+        <div className="overflow-y-auto overscroll-contain flex-1 px-5 py-4">{children}</div>
       </div>
     </div>
   )
