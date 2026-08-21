@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { HashRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Toaster } from 'sonner'
 import { AuthProvider } from '@/hooks/useAuth'
@@ -29,7 +29,7 @@ export default function App() {
       <AuthProvider>
         <ProjectProvider>
           <ExpenseSheetProvider>
-            <BrowserRouter>
+            <HashRouter>
               <AuthGate>
                 <Routes>
                   <Route element={<AppLayout />}>
@@ -44,7 +44,7 @@ export default function App() {
                   <Route path="*" element={<Navigate to="/" replace />} />
                 </Routes>
               </AuthGate>
-            </BrowserRouter>
+            </HashRouter>
             <Toaster
               position="top-center"
               toastOptions={{
