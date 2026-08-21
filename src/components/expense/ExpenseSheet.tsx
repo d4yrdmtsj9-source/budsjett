@@ -132,6 +132,7 @@ export function ExpenseSheet() {
     defaultStatus,
     mode,
     focusField,
+    formInstanceId,
     setEditingExpense,
     close,
   } = useExpenseSheet()
@@ -197,10 +198,10 @@ export function ExpenseSheet() {
     layout === 'convert'
       ? 'Registrer kjøp'
       : layout === 'buy'
-        ? editingExpense
+        ? mode === 'edit'
           ? 'Rediger kjøp'
           : 'Nytt kjøp'
-        : editingExpense
+        : mode === 'edit'
           ? 'Rediger plan'
           : 'Planlegg'
 
@@ -220,7 +221,9 @@ export function ExpenseSheet() {
     <Sheet open={isOpen} onClose={() => flushCloseRef.current()} title={title}>
       {isOpen && (
         <ExpenseForm
-          key={`${editingExpense?.id ?? 'new'}-${layout}-${focusField}`}
+          // formInstanceId only bumps when the sheet is opened — never on autosave,
+          // otherwise the form remounts mid-typing and the page jumps.
+          key={formInstanceId}
           initial={initialForm}
           expenseId={editingExpense?.id ?? null}
           layout={layout}
@@ -303,12 +306,14 @@ function ExpenseForm({
   savedIdRef.current = savedId
 
   useEffect(() => {
+    // Autofocus once when this form instance mounts — not again on re-renders.
     const t = window.setTimeout(() => {
-      if (focusField === 'unit_price') priceRef.current?.focus()
-      else descRef.current?.focus()
+      if (focusField === 'unit_price') priceRef.current?.focus({ preventScroll: true })
+      else descRef.current?.focus({ preventScroll: true })
     }, 50)
     return () => clearTimeout(t)
-  }, [focusField])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only for this formInstance
+  }, [])
 
   const persist = async (nextForm: ExpenseFormData, id: string | null) => {
     const locked: ExpenseFormData = {
@@ -560,14 +565,13 @@ function InlineNewCategory({ onCreated }: { onCreated: (id: string) => void }) {
   const [open, setOpen] = useState(false)
   const [name, setName] = useState('')
   const [saving, setSaving] = useState(false)
-  const boxRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (!open) return
-    // Let the new field expand, then scroll it into the sheet viewport.
     const t = window.setTimeout(() => {
-      boxRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
-    }, 50)
+      inputRef.current?.focus({ preventScroll: true })
+    }, 30)
     return () => clearTimeout(t)
   }, [open])
 
@@ -584,13 +588,13 @@ function InlineNewCategory({ onCreated }: { onCreated: (id: string) => void }) {
   }
 
   return (
-    <div ref={boxRef} className="rounded-xl border border-border bg-white/70 p-3 space-y-3">
+    <div className="rounded-xl border border-border bg-white/70 p-3 space-y-3">
       <Input
+        ref={inputRef}
         label="Ny kategori"
         value={name}
         onChange={(e) => setName(e.target.value)}
         placeholder="F.eks. Materialer"
-        autoFocus
       />
       <div className="flex gap-2">
         <Button

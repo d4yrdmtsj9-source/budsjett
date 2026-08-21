@@ -1,7 +1,6 @@
 import { cn } from '@/lib/utils'
 import { X } from 'lucide-react'
-import { useEffect, useRef, type ReactNode } from 'react'
-import { useKeyboardOffset } from '@/hooks/useKeyboardOffset'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 
 interface SheetProps {
   open: boolean
@@ -16,8 +15,7 @@ function scrollFieldIntoSheet(container: HTMLElement, target: HTMLElement) {
   const cRect = container.getBoundingClientRect()
   const tRect = target.getBoundingClientRect()
   const margin = 20
-  // Extra room so labels + next controls stay visible above the keyboard edge
-  const bottomPad = 56
+  const bottomPad = 72
 
   if (tRect.bottom > cRect.bottom - bottomPad) {
     container.scrollTop += tRect.bottom - cRect.bottom + bottomPad
@@ -26,17 +24,77 @@ function scrollFieldIntoSheet(container: HTMLElement, target: HTMLElement) {
   }
 }
 
+/**
+ * Position the panel inside the visual viewport via direct DOM writes.
+ * Avoids React re-renders on every keyboard frame (a common source of jumpiness).
+ */
+function useSheetViewport(open: boolean, panelRef: React.RefObject<HTMLDivElement | null>) {
+  const [keyboardOpen, setKeyboardOpen] = useState(false)
+
+  useEffect(() => {
+    if (!open) {
+      setKeyboardOpen(false)
+      return
+    }
+
+    const vv = window.visualViewport
+    let frame = 0
+    let lastKb = false
+
+    const apply = () => {
+      cancelAnimationFrame(frame)
+      frame = requestAnimationFrame(() => {
+        const panel = panelRef.current
+        if (!panel) return
+
+        const height = vv ? Math.round(vv.height) : window.innerHeight
+        const offsetTop = vv ? Math.round(vv.offsetTop) : 0
+        // Gap between layout viewport bottom and visual viewport bottom
+        const bottomGap = Math.max(0, Math.round(window.innerHeight - height - offsetTop))
+        const kb = bottomGap > 80 || (vv ? window.innerHeight - vv.height > 80 : false)
+
+        const maxHeight = Math.max(240, kb ? height - 8 : Math.round(height * 0.92))
+
+        panel.style.bottom = `${bottomGap}px`
+        panel.style.maxHeight = `${maxHeight}px`
+        panel.style.height = kb ? `${maxHeight}px` : ''
+
+        if (kb !== lastKb) {
+          lastKb = kb
+          setKeyboardOpen(kb)
+        }
+
+        if (window.scrollY !== 0) window.scrollTo(0, 0)
+      })
+    }
+
+    apply()
+    vv?.addEventListener('resize', apply)
+    vv?.addEventListener('scroll', apply)
+    window.addEventListener('resize', apply)
+
+    return () => {
+      cancelAnimationFrame(frame)
+      vv?.removeEventListener('resize', apply)
+      vv?.removeEventListener('scroll', apply)
+      window.removeEventListener('resize', apply)
+    }
+  }, [open, panelRef])
+
+  return keyboardOpen
+}
+
 export function Sheet({ open, onClose, title, subtitle, children }: SheetProps) {
   const panelRef = useRef<HTMLDivElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
-  const { offset, viewportHeight, keyboardOpen } = useKeyboardOffset(open)
+  const keyboardOpen = useSheetViewport(open, panelRef)
 
   // Freeze the page under the sheet so iOS focus/keyboard can't jump the layout.
   useEffect(() => {
     if (!open) return
 
     const scrollY = window.scrollY
-    const { body } = document
+    const { body, documentElement } = document
     const prev = {
       position: body.style.position,
       top: body.style.top,
@@ -44,6 +102,7 @@ export function Sheet({ open, onClose, title, subtitle, children }: SheetProps) 
       right: body.style.right,
       width: body.style.width,
       overflow: body.style.overflow,
+      htmlOverflow: documentElement.style.overflow,
     }
 
     body.style.position = 'fixed'
@@ -52,6 +111,7 @@ export function Sheet({ open, onClose, title, subtitle, children }: SheetProps) 
     body.style.right = '0'
     body.style.width = '100%'
     body.style.overflow = 'hidden'
+    documentElement.style.overflow = 'hidden'
 
     return () => {
       body.style.position = prev.position
@@ -60,27 +120,31 @@ export function Sheet({ open, onClose, title, subtitle, children }: SheetProps) 
       body.style.right = prev.right
       body.style.width = prev.width
       body.style.overflow = prev.overflow
+      documentElement.style.overflow = prev.htmlOverflow
       window.scrollTo(0, scrollY)
     }
   }, [open])
 
-  // Keep focused inputs visible inside the sheet when the keyboard opens or
-  // when the user taps a field further down (e.g. kategori).
+  // Keep focused inputs visible inside the sheet scroll area.
   useEffect(() => {
     if (!open) return
     const root = scrollRef.current
     if (!root) return
 
-    let timer = 0
+    const timers: number[] = []
     const run = (target: HTMLElement) => {
-      window.clearTimeout(timer)
-      // Wait for keyboard + sheet resize to settle (iOS is slow).
-      timer = window.setTimeout(() => {
-        const container = scrollRef.current
-        if (!container) return
-        scrollFieldIntoSheet(container, target)
-        window.scrollTo(0, 0)
-      }, 280)
+      for (const t of timers) window.clearTimeout(t)
+      timers.length = 0
+      for (const delay of [120, 380]) {
+        timers.push(
+          window.setTimeout(() => {
+            const container = scrollRef.current
+            if (!container) return
+            scrollFieldIntoSheet(container, target)
+            window.scrollTo(0, 0)
+          }, delay),
+        )
+      }
     }
 
     const onFocusIn = (e: FocusEvent) => {
@@ -92,15 +156,12 @@ export function Sheet({ open, onClose, title, subtitle, children }: SheetProps) 
 
     root.addEventListener('focusin', onFocusIn)
     return () => {
-      window.clearTimeout(timer)
+      for (const t of timers) window.clearTimeout(t)
       root.removeEventListener('focusin', onFocusIn)
     }
-  }, [open, keyboardOpen, offset, viewportHeight])
+  }, [open, keyboardOpen])
 
   if (!open) return null
-
-  // Fit the sheet into the visible visual viewport (above the keyboard).
-  const maxHeight = Math.max(240, Math.round(viewportHeight - (keyboardOpen ? 8 : viewportHeight * 0.08)))
 
   return (
     <div className="fixed inset-0 z-50">
@@ -118,11 +179,8 @@ export function Sheet({ open, onClose, title, subtitle, children }: SheetProps) 
           !keyboardOpen && 'safe-bottom',
         )}
         style={{
-          bottom: offset,
-          maxHeight,
-          // When keyboard is up, use a fixed height so content scrolls inside
-          // instead of the whole sheet resizing/jumping on each focus.
-          height: keyboardOpen ? maxHeight : undefined,
+          bottom: 0,
+          maxHeight: '92dvh',
         }}
       >
         <div className="flex items-center justify-between px-5 py-4 border-b border-border/50 shrink-0">
