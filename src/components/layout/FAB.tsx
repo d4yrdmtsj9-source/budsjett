@@ -1,13 +1,11 @@
 import { ClipboardList, ShoppingBag } from 'lucide-react'
 import { useExpenseSheet } from '@/hooks/useExpenseSheet'
-import { useKeyboardOffset } from '@/hooks/useKeyboardOffset'
 import { cn } from '@/lib/utils'
 
 export function FAB() {
-  const { openNew } = useExpenseSheet()
-  const { keyboardOpen } = useKeyboardOffset(true)
+  const { openNew, isOpen } = useExpenseSheet()
 
-  if (keyboardOpen) return null
+  if (isOpen) return null
 
   return (
     <div className="fixed bottom-24 right-4 z-30 flex flex-col gap-2 items-end">

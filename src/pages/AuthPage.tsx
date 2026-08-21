@@ -11,9 +11,9 @@ export function AuthGate({ children }: { children: ReactNode }) {
   const { session, loading: authLoading } = useAuth()
   const { hasProject, loading: projectLoading } = useProject()
 
-  if (authLoading || projectLoading) return <LoadingSpinner />
+  if (authLoading || projectLoading) return <LoadingSpinner className="h-full" />
   if (!session?.projectId || !hasProject) return <OnboardingPage />
-  return <>{children}</>
+  return <div className="h-full">{children}</div>
 }
 
 function OnboardingPage() {
@@ -106,7 +106,7 @@ function OnboardingPage() {
   }
 
   return (
-    <div className="min-h-dvh flex flex-col items-center justify-center px-4 safe-top safe-bottom">
+    <div className="h-full overflow-y-auto flex flex-col items-center justify-center px-4 py-8 safe-top safe-bottom">
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
           <h1 className="font-display text-4xl font-bold text-primary">Renover</h1>

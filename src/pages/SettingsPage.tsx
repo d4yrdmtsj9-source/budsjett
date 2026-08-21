@@ -315,7 +315,6 @@ export function SettingsPage() {
             onChange={(e) => setCategoryName(e.target.value)}
             placeholder="F.eks. Materialer"
             required
-            autoFocus
           />
           <div className="flex flex-wrap gap-2">
             {CATEGORY_SUGGESTIONS.filter(
@@ -370,7 +369,6 @@ export function SettingsPage() {
             onChange={(e) => setNewMemberName(e.target.value)}
             placeholder="Partnerens navn"
             required
-            autoFocus
           />
           <p className="text-xs text-muted">
             De åpner appen på sin enhet, velger «Åpne / bli med», skriver invitasjonskoden og

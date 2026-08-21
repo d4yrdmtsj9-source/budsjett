@@ -115,7 +115,6 @@ export function RoomsPage() {
             onChange={(e) => setName(e.target.value)}
             placeholder="F.eks. Stue"
             required
-            autoFocus
           />
           <div className="flex flex-wrap gap-2">
             {ROOM_SUGGESTIONS.filter((s) => !rooms?.some((r) => r.name === s)).map((s) => (

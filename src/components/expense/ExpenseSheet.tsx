@@ -82,12 +82,10 @@ function resolveLayout(
 
 function QtyPriceFields({
   form,
-  priceRef,
   priceLabel,
   onUpdate,
 }: {
   form: ExpenseFormData
-  priceRef: React.RefObject<HTMLInputElement | null>
   priceLabel: string
   onUpdate: (patch: Partial<ExpenseFormData>) => void
 }) {
@@ -110,7 +108,6 @@ function QtyPriceFields({
         options={DEFAULT_UNITS.map((u) => ({ value: u, label: u }))}
       />
       <Input
-        ref={priceRef}
         label={priceLabel}
         type="number"
         min={0}
@@ -131,7 +128,6 @@ export function ExpenseSheet() {
     defaultRoomId,
     defaultStatus,
     mode,
-    focusField,
     formInstanceId,
     setEditingExpense,
     close,
@@ -218,16 +214,24 @@ export function ExpenseSheet() {
       : null
 
   return (
-    <Sheet open={isOpen} onClose={() => flushCloseRef.current()} title={title}>
+    <Sheet
+      open={isOpen}
+      onClose={() => flushCloseRef.current()}
+      title={title}
+      footer={
+        isOpen ? (
+          <Button form="expense-form" type="submit" size="lg" className="w-full">
+            Ferdig
+          </Button>
+        ) : null
+      }
+    >
       {isOpen && (
         <ExpenseForm
-          // formInstanceId only bumps when the sheet is opened — never on autosave,
-          // otherwise the form remounts mid-typing and the page jumps.
           key={formInstanceId}
           initial={initialForm}
           expenseId={editingExpense?.id ?? null}
           layout={layout}
-          focusField={focusField}
           plannedSummary={plannedSummary}
           roomOptions={roomOptions}
           categoryOptions={categoryOptions}
@@ -250,7 +254,6 @@ function ExpenseForm({
   initial,
   expenseId,
   layout,
-  focusField,
   plannedSummary,
   roomOptions,
   categoryOptions,
@@ -265,7 +268,6 @@ function ExpenseForm({
   initial: ExpenseFormData
   expenseId: string | null
   layout: FormLayout
-  focusField: 'description' | 'unit_price'
   plannedSummary: {
     description: string
     estimate: number
@@ -295,8 +297,6 @@ function ExpenseForm({
     layout !== 'plan' || !!(initial.discount_percent || initial.discount_amount),
   )
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle')
-  const descRef = useRef<HTMLInputElement>(null)
-  const priceRef = useRef<HTMLInputElement>(null)
   const formRef = useRef(form)
   const savedIdRef = useRef(savedId)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -304,16 +304,6 @@ function ExpenseForm({
 
   formRef.current = form
   savedIdRef.current = savedId
-
-  useEffect(() => {
-    // Autofocus once when this form instance mounts — not again on re-renders.
-    const t = window.setTimeout(() => {
-      if (focusField === 'unit_price') priceRef.current?.focus({ preventScroll: true })
-      else descRef.current?.focus({ preventScroll: true })
-    }, 50)
-    return () => clearTimeout(t)
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only for this formInstance
-  }, [])
 
   const persist = async (nextForm: ExpenseFormData, id: string | null) => {
     const locked: ExpenseFormData = {
@@ -403,11 +393,12 @@ function ExpenseForm({
 
   return (
     <form
+      id="expense-form"
       onSubmit={(e) => {
         e.preventDefault()
         void flushAndClose()
       }}
-      className="space-y-4 pb-8"
+      className="space-y-4 pb-4"
     >
       <p className="text-xs text-muted -mt-1">{saveLabel}</p>
 
@@ -424,7 +415,6 @@ function ExpenseForm({
 
       {layout !== 'convert' && (
         <Input
-          ref={descRef}
           label="Beskrivelse"
           value={form.description === 'Uten tittel' ? '' : form.description}
           onChange={(e) => update({ description: e.target.value })}
@@ -434,8 +424,7 @@ function ExpenseForm({
 
       <QtyPriceFields
         form={form}
-        priceRef={priceRef}
-        priceLabel={layout === 'plan' ? 'Pris/enhet' : 'Pris/enhet'}
+        priceLabel="Pris/enhet"
         onUpdate={update}
       />
 
@@ -556,10 +545,6 @@ function ExpenseForm({
           />
         </>
       )}
-
-      <Button type="submit" size="lg" className="w-full">
-        Ferdig
-      </Button>
     </form>
   )
 }
@@ -569,15 +554,6 @@ function InlineNewCategory({ onCreated }: { onCreated: (id: string) => void }) {
   const [open, setOpen] = useState(false)
   const [name, setName] = useState('')
   const [saving, setSaving] = useState(false)
-  const inputRef = useRef<HTMLInputElement>(null)
-
-  useEffect(() => {
-    if (!open) return
-    const t = window.setTimeout(() => {
-      inputRef.current?.focus({ preventScroll: true })
-    }, 30)
-    return () => clearTimeout(t)
-  }, [open])
 
   if (!open) {
     return (
@@ -594,7 +570,6 @@ function InlineNewCategory({ onCreated }: { onCreated: (id: string) => void }) {
   return (
     <div className="rounded-xl border border-border bg-white/70 p-3 space-y-3">
       <Input
-        ref={inputRef}
         label="Ny kategori"
         value={name}
         onChange={(e) => setName(e.target.value)}
