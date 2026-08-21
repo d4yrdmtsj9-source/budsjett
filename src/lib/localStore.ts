@@ -1,7 +1,7 @@
 /**
  * Local-first store for Renover.
- * Data lives in IndexedDB; partners sync over Supabase Realtime broadcast
- * (no auth / no RLS required).
+ * Data lives in IndexedDB, is mirrored to the cloud snapshot, and also
+ * syncs live over Supabase Realtime broadcast when both devices are open.
  */
 
 const DB_NAME = 'renover-db'
@@ -222,9 +222,11 @@ export async function loadProjectByInvite(code: string): Promise<LocalProject | 
   })
 }
 
-export async function saveProject(project: LocalProject) {
+export async function saveProject(project: LocalProject, opts?: { touch?: boolean }) {
   const normalized = normalizeProject(project)
-  normalized.updated_at = new Date().toISOString()
+  if (opts?.touch !== false) {
+    normalized.updated_at = new Date().toISOString()
+  }
   await idbSet(PROJECT_PREFIX + normalized.id, normalized)
   await idbSet(`renover-invite:${normalized.invite_code}`, normalized.id)
   return normalized

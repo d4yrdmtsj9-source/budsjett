@@ -155,7 +155,7 @@ export function SettingsPage() {
               </Button>
             </div>
             <p className="text-xs text-muted mt-2">
-              Begge må ha appen åpen for live synk. Ellers: eksporter/importer.
+              Endringer lagres i skyen. Åpne med samme invitasjonskode på den andre enheten.
             </p>
           </div>
 

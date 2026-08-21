@@ -13,6 +13,7 @@ import {
   type LocalMember,
 } from '@/lib/localStore'
 import { startProjectSync, publishProject, fetchProjectByInvite } from '@/lib/sync'
+import { mergeCloudProject, pushCloudProject, scheduleCloudPush } from '@/lib/cloudStore'
 
 export interface ProjectMemberView {
   id: string
@@ -96,15 +97,45 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       setLoading(false)
       return
     }
-    const p = await loadProject(session.projectId)
-    setRaw(p)
+    const local = await loadProject(session.projectId)
+    const newer = await mergeCloudProject(local, session.inviteCode)
+    if (newer && newer !== local) {
+      await saveProject(newer, { touch: false })
+    }
+    setRaw(newer)
     setLoading(false)
   }
 
   useEffect(() => {
     setLoading(true)
     refreshProject()
-  }, [session?.projectId])
+  }, [session?.projectId, session?.inviteCode])
+
+  useEffect(() => {
+    if (!session?.inviteCode || !session.projectId) return
+
+    const syncFromCloud = async () => {
+      if (document.visibilityState === 'hidden') return
+      const local = await loadProject(session.projectId)
+      const newer = await mergeCloudProject(local, session.inviteCode)
+      if (newer && local && new Date(newer.updated_at) > new Date(local.updated_at)) {
+        await saveProject(newer, { touch: false })
+        setRaw(newer)
+      }
+    }
+
+    const onVis = () => {
+      if (document.visibilityState === 'visible') void syncFromCloud()
+    }
+    document.addEventListener('visibilitychange', onVis)
+    window.addEventListener('focus', onVis)
+    const id = window.setInterval(() => void syncFromCloud(), 15_000)
+    return () => {
+      document.removeEventListener('visibilitychange', onVis)
+      window.removeEventListener('focus', onVis)
+      window.clearInterval(id)
+    }
+  }, [session?.inviteCode, session?.projectId])
 
   useEffect(() => {
     const unsub = subscribeProject((p) => {
@@ -124,6 +155,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     const saved = await saveProject(p)
     setRaw(saved)
     publishProject(saved)
+    scheduleCloudPush(saved)
   }
 
   const createProject = async (name: string, budget: number, displayName: string) => {
@@ -167,6 +199,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       setRaw(saved)
       try {
         publishProject(saved)
+        void pushCloudProject(saved)
       } catch {
         // Sync is best-effort
       }
@@ -185,7 +218,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         return {
           project: null,
           error:
-            'Fant ikke prosjektet. Be den andre å ha appen åpen, eller importer en sikkerhetskopi under Innstillinger.',
+            'Fant ikke prosjektet. Sjekk koden, eller importer en sikkerhetskopi under Innstillinger.',
         }
       }
       return { project, error: null }
@@ -208,7 +241,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       if (!project) {
         return {
           error:
-            'Fant ikke prosjektet. Be den andre å ha appen åpen, eller importer en sikkerhetskopi.',
+            'Fant ikke prosjektet. Sjekk koden, eller importer en sikkerhetskopi.',
         }
       }
 
@@ -262,6 +295,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
 
       const saved = await saveProject(project)
       publishProject(saved)
+      void pushCloudProject(saved)
       await setSession({
         deviceKey,
         displayName: member.display_name,

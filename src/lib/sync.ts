@@ -5,10 +5,24 @@ import {
   saveProject,
   type LocalProject,
 } from '@/lib/localStore'
+import { pullCloudProject, pushCloudProject } from '@/lib/cloudStore'
 
 type Handler = (project: LocalProject) => void
 
-const JOIN_WAIT_MS = 10_000
+const JOIN_WAIT_MS = 6_000
+const CLOUD_RETRY_MS = 500
+const CLOUD_RETRY_ATTEMPTS = 4
+
+async function pullCloudWithRetry(code: string): Promise<LocalProject | null> {
+  for (let i = 0; i < CLOUD_RETRY_ATTEMPTS; i++) {
+    const cloud = await pullCloudProject(code)
+    if (cloud) return cloud
+    if (i < CLOUD_RETRY_ATTEMPTS - 1) {
+      await new Promise((r) => setTimeout(r, CLOUD_RETRY_MS))
+    }
+  }
+  return null
+}
 
 function channelNameFor(inviteCode: string) {
   return `renover:${inviteCode.toUpperCase()}`
@@ -38,7 +52,8 @@ export function startProjectSync(
 
       const local = await loadProject(incoming.id)
       if (!local || new Date(incoming.updated_at) >= new Date(local.updated_at)) {
-        await saveProject(incoming)
+        await saveProject(incoming, { touch: false })
+        void pushCloudProject(incoming)
         onUpdate(incoming)
       }
     })
@@ -91,14 +106,20 @@ export function publishProject(project: LocalProject) {
 }
 
 /**
- * Load project by invite: local cache first, then wait for a live sync packet.
- * Asks online peers to republish via sync_request.
+ * Load project by invite: cloud snapshot first, then live peers, then local cache.
  */
 export async function fetchProjectByInvite(
   inviteCode: string,
   waitMs = JOIN_WAIT_MS,
 ): Promise<LocalProject | null> {
   const code = inviteCode.trim().toUpperCase()
+
+  const cloud = await pullCloudWithRetry(code)
+  if (cloud) {
+    await saveProject(cloud, { touch: false })
+    return cloud
+  }
+
   const cached = await loadProjectByInvite(code)
   if (cached) return cached
 
@@ -123,7 +144,8 @@ export async function fetchProjectByInvite(
       .on('broadcast', { event: 'project' }, async ({ payload }) => {
         const incoming = payload as LocalProject
         if (!incoming?.id || incoming.invite_code !== code) return
-        await saveProject(incoming)
+        await saveProject(incoming, { touch: false })
+        void pushCloudProject(incoming)
         finish(incoming)
       })
       .subscribe(async (status) => {
@@ -137,7 +159,8 @@ export async function fetchProjectByInvite(
       })
 
     const timer = setTimeout(async () => {
-      const again = await loadProjectByInvite(code)
+      const again = (await pullCloudProject(code)) ?? (await loadProjectByInvite(code))
+      if (again) await saveProject(again, { touch: false })
       finish(again)
     }, waitMs)
   })
