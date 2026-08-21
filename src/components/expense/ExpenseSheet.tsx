@@ -402,7 +402,7 @@ function ExpenseForm({
         e.preventDefault()
         void flushAndClose()
       }}
-      className="space-y-4 pb-6"
+      className="space-y-4 pb-28"
     >
       <p className="text-xs text-muted -mt-1">{saveLabel}</p>
 
@@ -560,6 +560,16 @@ function InlineNewCategory({ onCreated }: { onCreated: (id: string) => void }) {
   const [open, setOpen] = useState(false)
   const [name, setName] = useState('')
   const [saving, setSaving] = useState(false)
+  const boxRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    // Let the new field expand, then scroll it into the sheet viewport.
+    const t = window.setTimeout(() => {
+      boxRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+    }, 50)
+    return () => clearTimeout(t)
+  }, [open])
 
   if (!open) {
     return (
@@ -574,7 +584,7 @@ function InlineNewCategory({ onCreated }: { onCreated: (id: string) => void }) {
   }
 
   return (
-    <div className="rounded-xl border border-border bg-white/70 p-3 space-y-3">
+    <div ref={boxRef} className="rounded-xl border border-border bg-white/70 p-3 space-y-3">
       <Input
         label="Ny kategori"
         value={name}
