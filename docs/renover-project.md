@@ -1,49 +1,61 @@
-# Renover — Lovable renovation budget app
+# Renover — renovation budget app
 
-Private two-person home renovation budgeting app (NOK).
+Private two-person home renovation budgeting app (NOK). Mobile-first Scandinavian product.
 
 ## Links
 
-- **Editor:** https://lovable.dev/projects/9f972027-09a7-432f-a9f5-162ae10a36c1
-- **Preview:** https://id-preview--9f972027-09a7-432f-a9f5-162ae10a36c1.lovable.app
+- **Local app (this repo):** `npm run dev` → http://localhost:5173
+- **Lovable editor:** https://lovable.dev/projects/9f972027-09a7-432f-a9f5-162ae10a36c1
+- **Lovable preview:** https://id-preview--9f972027-09a7-432f-a9f5-162ae10a36c1.lovable.app
 - **Project ID:** `9f972027-09a7-432f-a9f5-162ae10a36c1`
 - **Workspace:** Erlend's Lovable (`1433608d2f91ac300fab`)
+- **Supabase:** `vqptscvjfcontauzdhqd`
 
-## Local development
+## Why local + Lovable?
 
-This repo contains the full Vite + React 19 implementation (Lovable project ran out of credits).
+The Lovable agent scaffolded Cloud/Postgres (schema, RLS, design tokens) then the workspace ran out of credits before screens shipped. This repo is the complete working frontend wired to the same Lovable Cloud Supabase backend.
 
-```bash
-npm install
-npm run dev
-```
-
-Supabase env vars are in `.env` — same backend as the Lovable project.
+To finish the Lovable-hosted UI later: add credits at https://lovable.dev/settings/billing and continue the agent with the project knowledge already set on the Lovable project.
 
 ## Hierarchy
 
 Renovation Project → Rooms → Categories → Expenses
 
+## Calculations
+
+- **Projected** = sum of all non-deleted expenses (all statuses)
+- **Paid** = sum where status = `paid`
+- Line total = `total_override` OR `quantity × unit_price − discount`
+- Discount savings aggregated on the dashboard
+
 ## Data model
 
-| Table | Key fields |
-|-------|-----------|
-| `profiles` | id, display_name |
-| `renovation_projects` | name, invite_code, total_budget, created_by |
-| `project_members` | project_id, user_id (max 2) |
-| `rooms` | project_id, name, budget, sort_order, archived, deleted_at |
-| `categories` | project_id, name, budget |
-| `expenses` | description, room_id, category_id, quantity, unit, unit_price, total_override, discount_*, supplier, expense_date, status, who_paid, notes, deleted_at, total |
-| `expense_attachments` | expense_id, file_path, file_name |
-| `activity_events` | project_id, event_type, payload |
+| Table | Purpose |
+|-------|---------|
+| `profiles` | Display names |
+| `renovation_projects` | One shared renovation + invite code + total budget |
+| `project_members` | Max 2 equal members (DB trigger) |
+| `rooms` | Areas with optional budget, sort, archive, soft-delete |
+| `categories` | Project-scoped, reusable across rooms |
+| `expenses` | Line items with qty/unit/price, status, discounts, soft-delete |
+| `expense_attachments` | Receipt files in `receipts` bucket |
+| `activity_events` | Lightweight shared activity |
 
-## Status
+## Screens
 
-**Complete local app** — auth, dashboard, rooms, expenses, suppliers, settings, FAB, expense sheet, realtime, soft-delete with undo.
+1. Auth + create/join project
+2. Dashboard (budget / paid / projected / remaining / by room & category / activity)
+3. Rooms + room detail
+4. All expenses (search, filter, sort, duplicate, undo delete)
+5. Suppliers (auto from expenses)
+6. Settings (invite code, budget, members)
+7. FAB expense sheet (live qty×price, progressive discounts, receipts)
 
-## Gaps / notes
+## Run
 
-- Supabase RLS policies and storage bucket (`receipts`) must exist on the backend
-- Activity events are read-only (no write triggers in this app yet)
-- Category management UI is minimal (categories used in expense sheet; no dedicated CRUD page)
-- Recharts is installed but not yet used on dashboard (progress bars used instead)
+```bash
+npm install
+cp .env.example .env   # if needed
+npm run dev
+npm run build
+```

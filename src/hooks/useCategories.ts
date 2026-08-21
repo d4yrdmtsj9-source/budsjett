@@ -15,6 +15,7 @@ export function useCategories() {
         .from('categories')
         .select('*')
         .eq('project_id', project!.id)
+        .is('deleted_at', null)
         .order('name')
       if (error) throw error
       return data as Category[]

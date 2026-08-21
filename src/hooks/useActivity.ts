@@ -57,21 +57,24 @@ export function useActivity(limit = 20) {
 }
 
 export function formatActivityMessage(event: ActivityEvent): string {
+  if (event.summary) return event.summary
   const payload = event.payload ?? {}
+  const name = event.profile?.display_name
+  const prefix = name ? `${name} ` : ''
   switch (event.event_type) {
     case 'expense_created':
-      return `La til utgift: ${payload.description ?? 'Ukjent'}`
+      return `${prefix}la til ${payload.description ?? 'utgift'}`
     case 'expense_updated':
-      return `Oppdaterte utgift: ${payload.description ?? 'Ukjent'}`
+      return `${prefix}oppdaterte ${payload.description ?? 'utgift'}`
     case 'expense_deleted':
-      return `Slettet utgift: ${payload.description ?? 'Ukjent'}`
+      return `${prefix}slettet ${payload.description ?? 'utgift'}`
     case 'room_created':
-      return `La til rom: ${payload.name ?? 'Ukjent'}`
+      return `${prefix}la til rom: ${payload.name ?? 'Ukjent'}`
     case 'member_joined':
       return `${payload.display_name ?? 'Noen'} ble med i prosjektet`
     case 'budget_updated':
-      return `Oppdaterte budsjett til ${payload.total_budget ?? '?'} kr`
+      return `${prefix}oppdaterte budsjett`
     default:
-      return event.event_type.replace(/_/g, ' ')
+      return event.event_type?.replace(/_/g, ' ') ?? 'Aktivitet'
   }
 }

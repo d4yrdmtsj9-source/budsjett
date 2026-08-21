@@ -11,6 +11,7 @@ import { useExpenses, uploadReceipt } from '@/hooks/useExpenses'
 import { useRooms } from '@/hooks/useRooms'
 import { useCategories } from '@/hooks/useCategories'
 import { useProject } from '@/hooks/useProject'
+import { useAuth } from '@/hooks/useAuth'
 import {
   calculateTotal,
   calculateSubtotal,
@@ -26,12 +27,37 @@ import {
   type ExpenseStatus,
 } from '@/lib/types'
 
+const PREFS_KEY = 'renover-expense-prefs'
+
+function loadPrefs(): Partial<ExpenseFormData> {
+  try {
+    return JSON.parse(localStorage.getItem(PREFS_KEY) ?? '{}') as Partial<ExpenseFormData>
+  } catch {
+    return {}
+  }
+}
+
+function savePrefs(form: ExpenseFormData) {
+  localStorage.setItem(
+    PREFS_KEY,
+    JSON.stringify({
+      unit: form.unit,
+      supplier: form.supplier,
+      category_id: form.category_id,
+      room_id: form.room_id,
+      who_paid: form.who_paid,
+      status: form.status,
+    }),
+  )
+}
+
 export function ExpenseSheet() {
   const { isOpen, editingExpense, defaultRoomId, close } = useExpenseSheet()
   const { createExpense, updateExpense } = useExpenses()
   const { data: rooms } = useRooms()
   const { data: categories } = useCategories()
-  const { members } = useProject()
+  const { project, members } = useProject()
+  const { user } = useAuth()
 
   const isEditing = !!editingExpense
 
@@ -47,9 +73,22 @@ export function ExpenseSheet() {
     label: m.profile?.display_name ?? 'Ukjent',
   }))
 
+  const prefs = loadPrefs()
   const initialForm = editingExpense
     ? expenseToForm(editingExpense)
-    : { ...defaultExpenseForm(), room_id: defaultRoomId }
+    : {
+        ...defaultExpenseForm(),
+        ...prefs,
+        room_id: defaultRoomId ?? prefs.room_id ?? null,
+        description: '',
+        quantity: 1,
+        unit_price: 0,
+        total_override: null,
+        discount_percent: null,
+        discount_amount: null,
+        notes: '',
+        expense_date: new Date().toISOString().split('T')[0],
+      }
 
   const handleSubmit = async (form: ExpenseFormData, receiptFile: File | null) => {
     if (!form.description.trim()) {
@@ -63,11 +102,12 @@ export function ExpenseSheet() {
         toast.success('Utgift oppdatert')
       } else {
         const created = await createExpense.mutateAsync(form)
-        if (receiptFile && created?.id) {
-          await uploadReceipt(created.id, receiptFile)
+        if (receiptFile && created?.id && project?.id) {
+          await uploadReceipt(created.id, receiptFile, project.id, user?.id)
         }
         toast.success('Utgift lagt til')
       }
+      savePrefs(form)
       close()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Noe gikk galt')

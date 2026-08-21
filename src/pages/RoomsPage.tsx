@@ -13,6 +13,18 @@ import { useExpenses } from '@/hooks/useExpenses'
 import { getExpenseTotal } from '@/lib/calc'
 import { formatNOK } from '@/lib/format'
 
+const ROOM_SUGGESTIONS = [
+  'Kjøkken',
+  'Bad',
+  'Stue',
+  'Soverom',
+  'Gang',
+  'Vaskerom',
+  'Garasje',
+  'Utvendig',
+  'Hele huset',
+]
+
 export function RoomsPage() {
   const { data: rooms, isLoading, createRoom } = useRooms()
   const { expenses } = useExpenses()
@@ -105,6 +117,18 @@ export function RoomsPage() {
             required
             autoFocus
           />
+          <div className="flex flex-wrap gap-2">
+            {ROOM_SUGGESTIONS.filter((s) => !rooms?.some((r) => r.name === s)).map((s) => (
+              <button
+                key={s}
+                type="button"
+                onClick={() => setName(s)}
+                className="rounded-full border border-border bg-white/70 px-3 py-1.5 text-xs font-medium text-foreground/80 hover:border-primary/40 hover:text-primary"
+              >
+                {s}
+              </button>
+            ))}
+          </div>
           <Input
             label="Budsjett (NOK)"
             type="number"

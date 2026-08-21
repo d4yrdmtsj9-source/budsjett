@@ -81,6 +81,11 @@ export interface ActivityEvent {
   id: string
   project_id: string
   user_id: string | null
+  actor_id?: string | null
+  action?: string
+  entity_type?: string
+  entity_id?: string | null
+  summary?: string | null
   event_type: string
   payload: Record<string, unknown>
   created_at: string
@@ -120,4 +125,4 @@ export const EXPENSE_STATUS_COLORS: Record<ExpenseStatus, string> = {
   paid: 'bg-emerald-100 text-emerald-800',
 }
 
-export const DEFAULT_UNITS = ['stk', 'm²', 'm', 'kg', 'timer', 'pakke', 'rull']
+export const DEFAULT_UNITS = ['stk', 'm', 'm²', 'm³', 'kg', 'liter', 'pakke', 'time']

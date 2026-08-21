@@ -38,9 +38,15 @@ export function DashboardPage() {
     const paid = sumPaidExpenses(expenses)
     const remaining = remainingBudget(totalBudget, projected)
     const progress = budgetProgress(projected, totalBudget)
-    const savings = totalBudget - projected
+    const underBudget = totalBudget - projected
+    const discountSavings = expenses.reduce((sum, e) => {
+      const subtotal = e.quantity * e.unit_price
+      if (e.discount_amount && e.discount_amount > 0) return sum + e.discount_amount
+      if (e.discount_percent && e.discount_percent > 0) return sum + subtotal * (e.discount_percent / 100)
+      return sum
+    }, 0)
 
-    return { totalBudget, projected, paid, remaining, progress, savings }
+    return { totalBudget, projected, paid, remaining, progress, underBudget, discountSavings }
   }, [project, expenses])
 
   const byRoom = useMemo(() => {
@@ -101,10 +107,20 @@ export function DashboardPage() {
         <div className="mt-4">
           <ProgressBar value={stats.projected} max={stats.totalBudget} showLabel />
         </div>
-        {stats.savings > 0 && (
+        {stats.underBudget > 0 && (
           <div className="mt-3 flex items-center gap-2 text-sm text-emerald-700">
             <PiggyBank className="h-4 w-4" />
-            <span>{formatNOK(stats.savings)} under budsjett</span>
+            <span>{formatNOK(stats.underBudget)} under budsjett</span>
+          </div>
+        )}
+        {stats.underBudget < 0 && (
+          <div className="mt-3 text-sm text-amber-700">
+            {formatNOK(Math.abs(stats.underBudget))} over budsjett
+          </div>
+        )}
+        {stats.discountSavings > 0 && (
+          <div className="mt-2 text-sm text-muted">
+            Spart {formatNOK(stats.discountSavings)} i rabatter
           </div>
         )}
       </Card>

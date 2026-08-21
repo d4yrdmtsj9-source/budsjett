@@ -74,6 +74,28 @@ export function useExpenses(filters: ExpenseFilters = {}) {
     }
   }, [project?.id, queryClient])
 
+  const logActivity = async (
+    action: string,
+    eventType: string,
+    summary: string,
+    entityId?: string,
+    payload: Record<string, unknown> = {},
+  ) => {
+    if (!project || !user) return
+    await supabase.from('activity_events').insert({
+      project_id: project.id,
+      actor_id: user.id,
+      user_id: user.id,
+      action,
+      event_type: eventType,
+      entity_type: 'expense',
+      entity_id: entityId ?? null,
+      summary,
+      payload,
+    })
+    queryClient.invalidateQueries({ queryKey: ['activity'] })
+  }
+
   const createExpense = useMutation({
     mutationFn: async (form: ExpenseFormData) => {
       const total = calculateTotal(form)
@@ -81,20 +103,20 @@ export function useExpenses(filters: ExpenseFilters = {}) {
         .from('expenses')
         .insert({
           project_id: project!.id,
-          description: form.description,
-          room_id: form.room_id,
-          category_id: form.category_id,
+          description: form.description.trim(),
+          room_id: form.room_id || null,
+          category_id: form.category_id || null,
           quantity: form.quantity,
-          unit: form.unit || null,
+          unit: form.unit || 'stk',
           unit_price: form.unit_price,
           total_override: form.total_override,
           discount_percent: form.discount_percent,
           discount_amount: form.discount_amount,
-          supplier: form.supplier || null,
+          supplier: form.supplier?.trim() || null,
           expense_date: form.expense_date || null,
           status: form.status,
           who_paid: form.who_paid || null,
-          notes: form.notes || null,
+          notes: form.notes?.trim() || null,
           total,
           created_by: user?.id,
           updated_by: user?.id,
@@ -102,6 +124,13 @@ export function useExpenses(filters: ExpenseFilters = {}) {
         .select()
         .single()
       if (error) throw error
+      await logActivity(
+        'created',
+        'expense_created',
+        `La til ${form.description} — ${total.toLocaleString('nb-NO')} kr`,
+        data.id,
+        { description: form.description, total },
+      )
       return data
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['expenses'] }),
@@ -113,20 +142,20 @@ export function useExpenses(filters: ExpenseFilters = {}) {
       const { data, error } = await supabase
         .from('expenses')
         .update({
-          description: form.description,
-          room_id: form.room_id,
-          category_id: form.category_id,
+          description: form.description.trim(),
+          room_id: form.room_id || null,
+          category_id: form.category_id || null,
           quantity: form.quantity,
-          unit: form.unit || null,
+          unit: form.unit || 'stk',
           unit_price: form.unit_price,
           total_override: form.total_override,
           discount_percent: form.discount_percent,
           discount_amount: form.discount_amount,
-          supplier: form.supplier || null,
+          supplier: form.supplier?.trim() || null,
           expense_date: form.expense_date || null,
           status: form.status,
           who_paid: form.who_paid || null,
-          notes: form.notes || null,
+          notes: form.notes?.trim() || null,
           total,
           updated_by: user?.id,
           updated_at: new Date().toISOString(),
@@ -135,6 +164,13 @@ export function useExpenses(filters: ExpenseFilters = {}) {
         .select()
         .single()
       if (error) throw error
+      await logActivity(
+        'updated',
+        'expense_updated',
+        `Oppdaterte ${form.description}`,
+        id,
+        { description: form.description, total },
+      )
       return data
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['expenses'] }),
@@ -142,11 +178,19 @@ export function useExpenses(filters: ExpenseFilters = {}) {
 
   const softDeleteExpense = useMutation({
     mutationFn: async (id: string) => {
+      const expense = (query.data ?? []).find((e) => e.id === id)
       const { error } = await supabase
         .from('expenses')
         .update({ deleted_at: new Date().toISOString(), updated_by: user?.id })
         .eq('id', id)
       if (error) throw error
+      await logActivity(
+        'deleted',
+        'expense_deleted',
+        `Slettet ${expense?.description ?? 'utgift'}`,
+        id,
+        { description: expense?.description },
+      )
       return id
     },
     onSuccess: (id) => {
@@ -179,7 +223,7 @@ export function useExpenses(filters: ExpenseFilters = {}) {
           room_id: expense.room_id,
           category_id: expense.category_id,
           quantity: expense.quantity,
-          unit: expense.unit,
+          unit: expense.unit || 'stk',
           unit_price: expense.unit_price,
           total_override: expense.total_override,
           discount_percent: expense.discount_percent,
@@ -229,9 +273,14 @@ export function useExpenseAttachments(expenseId: string | undefined) {
   })
 }
 
-export async function uploadReceipt(expenseId: string, file: File) {
+export async function uploadReceipt(
+  expenseId: string,
+  file: File,
+  projectId: string,
+  userId?: string,
+) {
   const ext = file.name.split('.').pop()
-  const path = `${expenseId}/${Date.now()}.${ext}`
+  const path = `${projectId}/${expenseId}/${Date.now()}.${ext}`
 
   const { error: uploadError } = await supabase.storage
     .from('receipts')
@@ -242,9 +291,12 @@ export async function uploadReceipt(expenseId: string, file: File) {
   const { data, error } = await supabase
     .from('expense_attachments')
     .insert({
+      project_id: projectId,
       expense_id: expenseId,
+      storage_path: path,
       file_path: path,
       file_name: file.name,
+      created_by: userId ?? null,
     })
     .select()
     .single()
