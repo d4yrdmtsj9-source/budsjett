@@ -138,7 +138,11 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         inviteCode: invite,
       })
       setRaw(project)
-      publishProject(project)
+      try {
+        publishProject(project)
+      } catch {
+        // Sync is best-effort; local create must still succeed
+      }
       return { error: null }
     } catch (e) {
       return { error: e instanceof Error ? e.message : 'Kunne ikke opprette' }

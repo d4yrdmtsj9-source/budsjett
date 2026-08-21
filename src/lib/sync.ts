@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase'
+import { getSupabase } from '@/lib/supabase'
 import {
   loadProject,
   saveProject,
@@ -16,6 +16,9 @@ export function startProjectSync(
   projectId: string,
   onUpdate: Handler,
 ) {
+  const supabase = getSupabase()
+  if (!supabase) return () => {}
+
   const channelName = `renover:${inviteCode.toUpperCase()}`
   const channel = supabase.channel(channelName, {
     config: { broadcast: { self: false } },
@@ -46,6 +49,9 @@ export function startProjectSync(
 }
 
 export function publishProject(project: LocalProject) {
+  const supabase = getSupabase()
+  if (!supabase) return
+
   const channelName = `renover:${project.invite_code.toUpperCase()}`
   const channel = supabase.channel(channelName)
   void channel.subscribe((status) => {

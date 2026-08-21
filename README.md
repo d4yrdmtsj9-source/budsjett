@@ -1,8 +1,18 @@
 # Renover
 
-Privat renovasjonsbudsjett for to personer (NOK).
+Renovasjonsbudsjett for to personer (NOK). **Ingen konto eller e-post.**
 
-## Kom i gang
+## Bruk appen her
+
+**https://d4yrdmtsj9-source.github.io/budsjett/**
+
+1. Skriv navnet ditt → **Start prosjekt**
+2. Del invitasjonskoden under **Innstillinger**
+3. Partneren: **Bli med** med koden
+
+> Bruk **ikke** Lovable-preview (`*.lovable.app`) — den krever Lovable-konto/kreditter og virker ikke.
+
+## Lokalt
 
 ```bash
 npm install
@@ -11,16 +21,8 @@ npm run dev
 
 Åpne http://localhost:5173
 
-## Innlogging (uten e-post)
+## Tekniske detaljer
 
-Supabase Auth-hooks i Lovable Cloud er ødelagt, så appen bruker **navn + invitasjonskode**:
-
-1. Person 1: skriv navn → **Opprett** prosjekt
-2. Kopier invitasjonskoden under Innstillinger
-3. Person 2: skriv navn → **Bli med** med koden
-
-Ingen konto/e-post/passord trengs.
-
-## Hosting
-
-Branch `gh-pages` har static build. Aktiver GitHub Pages (gratis på public repo).
+- Data lagres i IndexedDB på enheten
+- Synk mellom to telefoner via Supabase Realtime (broadcast)
+- Eksport/import av sikkerhetskopi under Innstillinger

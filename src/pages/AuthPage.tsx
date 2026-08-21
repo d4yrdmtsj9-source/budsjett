@@ -20,7 +20,7 @@ function OnboardingPage() {
   const [mode, setMode] = useState<'create' | 'join'>('create')
   const [displayName, setDisplayName] = useState('')
   const [projectName, setProjectName] = useState('Vår renovering')
-  const [budget, setBudget] = useState('')
+  const [budget, setBudget] = useState('500000')
   const [inviteCode, setInviteCode] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -55,7 +55,9 @@ function OnboardingPage() {
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
           <h1 className="font-display text-4xl font-bold text-primary">Renover</h1>
-          <p className="text-muted text-sm mt-2">Renoveringsbudsjett for to — ingen e-post nødvendig</p>
+          <p className="text-muted text-sm mt-2">
+            Ingen konto eller e-post — bare skriv navnet ditt og start.
+          </p>
         </div>
 
         <Card>
@@ -66,7 +68,7 @@ function OnboardingPage() {
               className="flex-1"
               onClick={() => setMode('create')}
             >
-              Opprett
+              Nytt prosjekt
             </Button>
             <Button
               type="button"
@@ -109,7 +111,7 @@ function OnboardingPage() {
                 label="Invitasjonskode"
                 value={inviteCode}
                 onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
-                placeholder="ABCD1234"
+                placeholder="ABCD12"
                 required
               />
             )}
@@ -123,7 +125,7 @@ function OnboardingPage() {
         </Card>
 
         <p className="text-center text-xs text-muted mt-6">
-          Del invitasjonskoden fra innstillinger med partneren din.
+          Etter start: del invitasjonskoden under Innstillinger med partneren din.
         </p>
       </div>
     </div>
