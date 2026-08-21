@@ -12,6 +12,7 @@ interface SheetProps {
 
 export function Sheet({ open, onClose, title, children }: SheetProps) {
   const panelRef = useRef<HTMLDivElement>(null)
+  const bodyRef = useRef<HTMLDivElement>(null)
   const { offset, viewportHeight, keyboardOpen } = useKeyboardOffset(open)
 
   useEffect(() => {
@@ -25,16 +26,22 @@ export function Sheet({ open, onClose, title, children }: SheetProps) {
     }
   }, [open])
 
-  // Keep focused inputs visible above the iOS keyboard
+  // Scroll only inside the sheet — avoid page-level scrollIntoView (causes iOS jump/zoom feel)
   useEffect(() => {
     if (!open) return
     const onFocusIn = (e: FocusEvent) => {
       const target = e.target
       if (!(target instanceof HTMLElement)) return
       if (!target.matches('input, textarea, select')) return
+      const scroller = bodyRef.current
+      if (!scroller || !scroller.contains(target)) return
       window.setTimeout(() => {
-        target.scrollIntoView({ block: 'center', behavior: 'smooth' })
-      }, 250)
+        const scrollerRect = scroller.getBoundingClientRect()
+        const targetRect = target.getBoundingClientRect()
+        const delta =
+          targetRect.top - scrollerRect.top - scrollerRect.height / 2 + targetRect.height / 2
+        scroller.scrollTop += delta
+      }, 50)
     }
     document.addEventListener('focusin', onFocusIn)
     return () => document.removeEventListener('focusin', onFocusIn)
@@ -43,7 +50,7 @@ export function Sheet({ open, onClose, title, children }: SheetProps) {
   if (!open) return null
 
   const maxHeight = keyboardOpen
-    ? Math.max(220, viewportHeight - 12)
+    ? Math.max(240, viewportHeight - 8)
     : Math.min(viewportHeight * 0.92, window.innerHeight * 0.92)
 
   return (
@@ -56,14 +63,15 @@ export function Sheet({ open, onClose, title, children }: SheetProps) {
         ref={panelRef}
         className={cn(
           'absolute left-0 right-0 overflow-hidden',
-          'bg-surface-elevated rounded-t-3xl shadow-2xl animate-slide-up',
+          'bg-surface-elevated rounded-t-3xl shadow-2xl',
+          open && !keyboardOpen && 'animate-slide-up',
           'flex flex-col',
           !keyboardOpen && 'safe-bottom',
         )}
         style={{
           bottom: offset,
           maxHeight,
-          transition: 'bottom 120ms ease-out, max-height 120ms ease-out',
+          // No CSS transition on bottom — transitions + keyboard = jumpy iOS UX
         }}
       >
         <div className="flex items-center justify-between px-5 py-4 border-b border-border/50 shrink-0">
@@ -76,7 +84,9 @@ export function Sheet({ open, onClose, title, children }: SheetProps) {
             <X className="h-5 w-5" />
           </button>
         </div>
-        <div className="overflow-y-auto overscroll-contain flex-1 px-5 py-4">{children}</div>
+        <div ref={bodyRef} className="overflow-y-auto overscroll-contain flex-1 px-5 py-4">
+          {children}
+        </div>
       </div>
     </div>
   )
