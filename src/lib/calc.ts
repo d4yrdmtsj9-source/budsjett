@@ -44,13 +44,25 @@ export function sumExpenses(expenses: Expense[]): number {
   return expenses.reduce((sum, e) => sum + getExpenseTotal(e), 0)
 }
 
+export function isBoughtStatus(status: Expense['status']): boolean {
+  return status === 'purchased' || status === 'paid'
+}
+
 /** Sum of bought/spent amounts (`purchased` + `paid`). */
 export function sumPaidExpenses(expenses: Expense[]): number {
   return expenses
-    .filter((e) => e.status === 'purchased' || e.status === 'paid')
+    .filter((e) => isBoughtStatus(e.status))
     .reduce((sum, e) => sum + getExpenseTotal(e), 0)
 }
 
+/** Sum of items not yet bought (planned / quoted / ordered). */
+export function sumPlannedExpenses(expenses: Expense[]): number {
+  return expenses
+    .filter((e) => !isBoughtStatus(e.status))
+    .reduce((sum, e) => sum + getExpenseTotal(e), 0)
+}
+
+/** All live expenses: kjøpt + planlagt. */
 export function sumProjectedExpenses(expenses: Expense[]): number {
   return expenses
     .filter((e) => !e.deleted_at)

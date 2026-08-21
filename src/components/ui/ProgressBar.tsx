@@ -9,8 +9,9 @@ interface ProgressBarProps {
 }
 
 export function ProgressBar({ value, max = 100, className, showLabel, size = 'md' }: ProgressBarProps) {
-  const pct = Math.min(100, max > 0 ? (value / max) * 100 : 0)
-  const isOver = pct > 100
+  const rawPct = max > 0 ? (value / max) * 100 : value > 0 ? 100 : 0
+  const isOver = max > 0 ? value > max : value > 0 && max === 0
+  const pct = Math.min(100, rawPct)
 
   return (
     <div className={cn('w-full', className)}>
@@ -25,11 +26,13 @@ export function ProgressBar({ value, max = 100, className, showLabel, size = 'md
             'h-full rounded-full transition-all duration-500',
             isOver ? 'bg-destructive' : 'bg-primary',
           )}
-          style={{ width: `${Math.min(pct, 100)}%` }}
+          style={{ width: `${pct}%` }}
         />
       </div>
       {showLabel && (
-        <p className="text-xs text-muted mt-1">{Math.round(pct)} % brukt</p>
+        <p className={cn('text-xs mt-1', isOver ? 'text-destructive' : 'text-muted')}>
+          {Math.round(rawPct)} % brukt
+        </p>
       )}
     </div>
   )

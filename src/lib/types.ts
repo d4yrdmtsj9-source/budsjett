@@ -113,18 +113,18 @@ export interface ExpenseFormData {
 
 export const EXPENSE_STATUS_LABELS: Record<ExpenseStatus, string> = {
   planned: 'Planlagt',
-  quoted: 'Tilbud',
-  ordered: 'Bestilt',
+  quoted: 'Planlagt',
+  ordered: 'Planlagt',
   purchased: 'Kjøpt',
-  paid: 'Betalt',
+  paid: 'Kjøpt',
 }
 
 export const EXPENSE_STATUS_COLORS: Record<ExpenseStatus, string> = {
   planned: 'bg-slate-100 text-slate-700',
-  quoted: 'bg-amber-100 text-amber-800',
-  ordered: 'bg-blue-100 text-blue-800',
+  quoted: 'bg-slate-100 text-slate-700',
+  ordered: 'bg-slate-100 text-slate-700',
   purchased: 'bg-teal-100 text-teal-800',
-  paid: 'bg-emerald-100 text-emerald-800',
+  paid: 'bg-teal-100 text-teal-800',
 }
 
 export const DEFAULT_UNITS = ['stk', 'm', 'm²', 'm³', 'kg', 'liter', 'pakke', 'time']

@@ -6,6 +6,7 @@ import {
   type LocalProject,
 } from '@/lib/localStore'
 import { pullCloudProject, pushCloudProject } from '@/lib/cloudStore'
+import { mergeProjects } from '@/lib/mergeProjects'
 
 type Handler = (project: LocalProject) => void
 
@@ -51,11 +52,10 @@ export function startProjectSync(
       if (projectId !== 'pending' && incoming.id !== projectId) return
 
       const local = await loadProject(incoming.id)
-      if (!local || new Date(incoming.updated_at) >= new Date(local.updated_at)) {
-        await saveProject(incoming, { touch: false })
-        void pushCloudProject(incoming)
-        onUpdate(incoming)
-      }
+      const merged = local ? mergeProjects(local, incoming) : incoming
+      await saveProject(merged, { touch: false })
+      void pushCloudProject(merged)
+      onUpdate(merged)
     })
     .on('broadcast', { event: 'sync_request' }, async () => {
       if (projectId === 'pending') return
@@ -115,12 +115,16 @@ export async function fetchProjectByInvite(
   const code = inviteCode.trim().toUpperCase()
 
   const cloud = await pullCloudWithRetry(code)
+  const cached = await loadProjectByInvite(code)
+  if (cloud && cached && cloud.id === cached.id) {
+    const merged = mergeProjects(cached, cloud)
+    await saveProject(merged, { touch: false })
+    return merged
+  }
   if (cloud) {
     await saveProject(cloud, { touch: false })
     return cloud
   }
-
-  const cached = await loadProjectByInvite(code)
   if (cached) return cached
 
   const supabase = getSupabase()

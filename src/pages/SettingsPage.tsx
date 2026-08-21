@@ -8,7 +8,6 @@ import { Sheet } from '@/components/ui/Sheet'
 import { useAuth } from '@/hooks/useAuth'
 import { useProject } from '@/hooks/useProject'
 import { useCategories } from '@/hooks/useCategories'
-import { formatNOK } from '@/lib/format'
 
 const CATEGORY_SUGGESTIONS = [
   'Materialer',
@@ -33,7 +32,6 @@ export function SettingsPage() {
   const [saving, setSaving] = useState(false)
   const [showAddCategory, setShowAddCategory] = useState(false)
   const [categoryName, setCategoryName] = useState('')
-  const [categoryBudget, setCategoryBudget] = useState('')
   const [showAddMember, setShowAddMember] = useState(false)
   const [newMemberName, setNewMemberName] = useState('')
 
@@ -77,6 +75,10 @@ export function SettingsPage() {
   }
 
   const handleSignOut = async () => {
+    const ok = window.confirm(
+      'Du må bruke invitasjonskoden for å åpne prosjektet igjen. Dataene ligger fortsatt på denne enheten.',
+    )
+    if (!ok) return
     await signOut()
     toast.success('Du er nå logget ut')
   }
@@ -91,12 +93,11 @@ export function SettingsPage() {
     try {
       await createCategory.mutateAsync({
         name: categoryName,
-        budget: parseFloat(categoryBudget) || 0,
+        budget: 0,
       })
       toast.success('Kategori lagt til')
       setShowAddCategory(false)
       setCategoryName('')
-      setCategoryBudget('')
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Kunne ikke legge til kategori')
     } finally {
@@ -197,6 +198,10 @@ export function SettingsPage() {
                       if (!data?.id || !data?.invite_code || !Array.isArray(data.expenses)) {
                         throw new Error('Ugyldig fil')
                       }
+                      const ok = window.confirm(
+                        `Erstatte prosjektet med filen (${data.expenses.length} utgifter)? Dette kan ikke angres.`,
+                      )
+                      if (!ok) return
                       await setRawProject(data)
                       toast.success('Prosjekt importert')
                     } catch {
@@ -244,7 +249,6 @@ export function SettingsPage() {
                   className="flex items-center justify-between py-3 first:pt-0 last:pb-0"
                 >
                   <span className="font-medium text-sm">{cat.name}</span>
-                  <span className="text-xs text-muted">{formatNOK(cat.budget)}</span>
                 </li>
               ))}
             </ul>
@@ -330,13 +334,6 @@ export function SettingsPage() {
               </button>
             ))}
           </div>
-          <Input
-            label="Budsjett (NOK)"
-            type="number"
-            value={categoryBudget}
-            onChange={(e) => setCategoryBudget(e.target.value)}
-            placeholder="0"
-          />
           <Button type="submit" size="lg" className="w-full" disabled={saving}>
             {saving ? 'Lagrer...' : 'Legg til kategori'}
           </Button>

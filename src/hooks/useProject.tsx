@@ -14,6 +14,7 @@ import {
 } from '@/lib/localStore'
 import { startProjectSync, publishProject, fetchProjectByInvite } from '@/lib/sync'
 import { mergeCloudProject, pushCloudProject, scheduleCloudPush } from '@/lib/cloudStore'
+import { projectFingerprint } from '@/lib/mergeProjects'
 
 export interface ProjectMemberView {
   id: string
@@ -99,7 +100,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     }
     const local = await loadProject(session.projectId)
     const newer = await mergeCloudProject(local, session.inviteCode)
-    if (newer && newer !== local) {
+    if (newer && (!local || projectFingerprint(newer) !== projectFingerprint(local))) {
       await saveProject(newer, { touch: false })
     }
     setRaw(newer)
@@ -118,7 +119,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       if (document.visibilityState === 'hidden') return
       const local = await loadProject(session.projectId)
       const newer = await mergeCloudProject(local, session.inviteCode)
-      if (newer && local && new Date(newer.updated_at) > new Date(local.updated_at)) {
+      if (newer && local && projectFingerprint(newer) !== projectFingerprint(local)) {
         await saveProject(newer, { touch: false })
         setRaw(newer)
       }

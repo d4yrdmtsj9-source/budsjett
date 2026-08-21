@@ -24,9 +24,6 @@ export function SupplierDetailPage() {
     )
   }
 
-  const paidPct =
-    supplier.totalAmount > 0 ? (supplier.paidAmount / supplier.totalAmount) * 100 : 0
-
   return (
     <div className="space-y-4 pb-4">
       <header>
@@ -46,22 +43,24 @@ export function SupplierDetailPage() {
       <Card padding="lg">
         <div className="grid grid-cols-2 gap-4 mb-4">
           <div>
-            <p className="text-xs text-muted">Totalt</p>
-            <p className="font-display text-lg font-semibold">
-              {formatNOK(supplier.totalAmount)}
-            </p>
-          </div>
-          <div>
-            <p className="text-xs text-muted">Betalt</p>
+            <p className="text-xs text-muted">Kjøpt</p>
             <p className="font-display text-lg font-semibold">
               {formatNOK(supplier.paidAmount)}
             </p>
           </div>
-          <div className="col-span-2">
-            <p className="text-xs text-muted mb-1">Betalt andel</p>
-            <ProgressBar value={paidPct} max={100} size="sm" />
+          <div>
+            <p className="text-xs text-muted">Planlagt</p>
+            <p className="font-display text-lg font-semibold">
+              {formatNOK(supplier.plannedAmount)}
+            </p>
           </div>
         </div>
+        {supplier.totalAmount > 0 && (
+          <div>
+            <p className="text-xs text-muted mb-1">Andel kjøpt</p>
+            <ProgressBar value={supplier.paidAmount} max={supplier.totalAmount} size="sm" />
+          </div>
+        )}
       </Card>
 
       <h2 className="font-display font-semibold">Utgifter</h2>

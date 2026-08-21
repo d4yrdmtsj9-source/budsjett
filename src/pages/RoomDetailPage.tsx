@@ -1,4 +1,4 @@
-import { useParams, Link } from 'react-router-dom'
+import { useParams, Link, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Pencil } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
@@ -12,23 +12,25 @@ import { ExpenseList } from '@/components/expense/ExpenseRow'
 import { useRoom, useRooms } from '@/hooks/useRooms'
 import { useExpenses } from '@/hooks/useExpenses'
 import { useExpenseSheet } from '@/hooks/useExpenseSheet'
-import { getExpenseTotal, sumPaidExpenses } from '@/lib/calc'
+import { sumPaidExpenses, sumPlannedExpenses } from '@/lib/calc'
 import { formatNOK } from '@/lib/format'
 
 export function RoomDetailPage() {
   const { roomId } = useParams<{ roomId: string }>()
   const { data: room, isLoading } = useRoom(roomId)
-  const { updateRoom } = useRooms()
+  const { updateRoom, deleteRoom } = useRooms()
   const { expenses } = useExpenses({ roomId })
   const { openNew } = useExpenseSheet()
+  const navigate = useNavigate()
   const [showEdit, setShowEdit] = useState(false)
   const [name, setName] = useState('')
   const [budget, setBudget] = useState('')
   const [saving, setSaving] = useState(false)
 
   const roomExpenses = expenses.filter((e) => e.room_id === roomId)
-  const plannedTotal = roomExpenses.reduce((s, e) => s + getExpenseTotal(e), 0)
+  const planned = sumPlannedExpenses(roomExpenses)
   const bought = sumPaidExpenses(roomExpenses)
+  const projected = bought + planned
 
   const openEditSheet = () => {
     if (room) {
@@ -98,21 +100,25 @@ export function RoomDetailPage() {
             <p className="font-display text-lg font-semibold">{formatNOK(bought)}</p>
           </div>
           <div>
-            <p className="text-xs text-muted">Planlagt totalt</p>
-            <p className="font-display text-lg font-semibold">{formatNOK(plannedTotal)}</p>
+            <p className="text-xs text-muted">Planlagt</p>
+            <p className="font-display text-lg font-semibold">{formatNOK(planned)}</p>
           </div>
           <div>
             <p className="text-xs text-muted">Gjenstår</p>
-            <p className="font-display text-lg font-semibold">
-              {formatNOK(room.budget - plannedTotal)}
+            <p className={`font-display text-lg font-semibold ${room.budget - projected < 0 ? 'text-destructive' : ''}`}>
+              {formatNOK(room.budget - projected)}
             </p>
           </div>
         </div>
-        <ProgressBar
-          value={plannedTotal}
-          max={room.budget}
-          showLabel
-        />
+        {room.budget > 0 ? (
+          <ProgressBar
+            value={projected}
+            max={room.budget}
+            showLabel
+          />
+        ) : (
+          <p className="text-xs text-muted">Ingen rombudsjett — sett det under rediger</p>
+        )}
       </Card>
 
       <div className="flex justify-between items-center gap-2">
@@ -156,6 +162,34 @@ export function RoomDetailPage() {
           />
           <Button type="submit" size="lg" className="w-full" disabled={saving}>
             {saving ? 'Lagrer...' : 'Lagre endringer'}
+          </Button>
+          <Button
+            type="button"
+            variant="destructive"
+            className="w-full"
+            disabled={saving}
+            onClick={async () => {
+              if (!roomId) return
+              const ok = window.confirm(
+                roomExpenses.length > 0
+                  ? 'Rommet skjules fra oversikten. Utgiftene blir liggende uten rom.'
+                  : 'Fjerne dette rommet?',
+              )
+              if (!ok) return
+              setSaving(true)
+              try {
+                await deleteRoom.mutateAsync(roomId)
+                toast.success('Rom fjernet')
+                setShowEdit(false)
+                navigate('/')
+              } catch (err) {
+                toast.error(err instanceof Error ? err.message : 'Kunne ikke fjerne rom')
+              } finally {
+                setSaving(false)
+              }
+            }}
+          >
+            Fjern rom
           </Button>
         </form>
       </Sheet>

@@ -28,40 +28,42 @@ export function SuppliersPage() {
         />
       ) : (
         <div className="space-y-3">
-          {suppliers.map((supplier) => {
-            const paidPct =
-              supplier.totalAmount > 0
-                ? (supplier.paidAmount / supplier.totalAmount) * 100
-                : 0
-
-            return (
-              <Link
-                key={supplier.name}
-                to={`/leverandorer/${encodeURIComponent(supplier.name)}`}
-              >
-                <Card>
-                  <div className="flex justify-between items-start mb-2">
-                    <div>
-                      <h3 className="font-display font-semibold">{supplier.name}</h3>
-                      <p className="text-sm text-muted">
-                        {supplier.expenseCount} utgift
-                        {supplier.expenseCount !== 1 ? 'er' : ''}
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <p className="font-display font-semibold">
-                        {formatNOK(supplier.totalAmount)}
-                      </p>
-                      <p className="text-xs text-muted">
-                        {formatNOK(supplier.paidAmount)} betalt
-                      </p>
-                    </div>
+          {suppliers.map((supplier) => (
+            <Link
+              key={supplier.name}
+              to={`/leverandorer/${encodeURIComponent(supplier.name)}`}
+            >
+              <Card>
+                <div className="flex justify-between items-start mb-2">
+                  <div>
+                    <h3 className="font-display font-semibold">{supplier.name}</h3>
+                    <p className="text-sm text-muted">
+                      {supplier.expenseCount} utgift
+                      {supplier.expenseCount !== 1 ? 'er' : ''}
+                    </p>
                   </div>
-                  <ProgressBar value={paidPct} max={100} size="sm" />
-                </Card>
-              </Link>
-            )
-          })}
+                  <div className="text-right">
+                    <p className="font-display font-semibold">
+                      {formatNOK(supplier.paidAmount)}
+                    </p>
+                    <p className="text-xs text-muted">Kjøpt</p>
+                  </div>
+                </div>
+                {supplier.plannedAmount > 0 && (
+                  <p className="text-xs text-muted mb-2">
+                    {formatNOK(supplier.plannedAmount)} planlagt
+                  </p>
+                )}
+                {supplier.totalAmount > 0 && (
+                  <ProgressBar
+                    value={supplier.paidAmount}
+                    max={supplier.totalAmount}
+                    size="sm"
+                  />
+                )}
+              </Card>
+            </Link>
+          ))}
         </div>
       )}
     </div>

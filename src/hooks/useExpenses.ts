@@ -71,7 +71,7 @@ export function useExpenses(filters: ExpenseFilters = {}) {
       const now = new Date().toISOString()
       const expense: LocalExpense = {
         id: uid(),
-        description: form.description.trim() || 'Uten tittel',
+        description: form.description.trim(),
         room_id: form.room_id,
         category_id: form.category_id,
         quantity: form.quantity,

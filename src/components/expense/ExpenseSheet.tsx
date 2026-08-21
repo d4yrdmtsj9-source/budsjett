@@ -51,13 +51,7 @@ function savePrefs(form: ExpenseFormData) {
 }
 
 function isMeaningful(form: ExpenseFormData) {
-  // Default quantity: 1 alone must not count — open/close would leave empty drafts.
-  return (
-    form.description.trim().length > 0 ||
-    form.unit_price > 0 ||
-    (form.total_override != null && form.total_override > 0) ||
-    !!form.supplier.trim()
-  )
+  return form.description.trim().length > 0
 }
 
 function toExpenseView(local: LocalExpense): Expense {
@@ -132,7 +126,7 @@ export function ExpenseSheet() {
     setEditingExpense,
     close,
   } = useExpenseSheet()
-  const { createExpense, updateExpense, softDeleteExpense } = useExpenses()
+  const { createExpense, updateExpense } = useExpenses()
   const { data: rooms } = useRooms()
   const { data: categories } = useCategories()
   const { members } = useProject()
@@ -232,7 +226,6 @@ export function ExpenseSheet() {
           }}
           createExpense={(form) => createExpense.mutateAsync(form)}
           updateExpense={(args) => updateExpense.mutateAsync(args)}
-          softDeleteExpense={(args) => softDeleteExpense.mutateAsync(args)}
         />
       )}
     </Sheet>
@@ -252,7 +245,6 @@ function ExpenseForm({
   registerCloseHandler,
   createExpense,
   updateExpense,
-  softDeleteExpense,
 }: {
   initial: ExpenseFormData
   expenseId: string | null
@@ -274,7 +266,6 @@ function ExpenseForm({
     form: ExpenseFormData
     quiet?: boolean
   }) => Promise<unknown>
-  softDeleteExpense: (id: string | { id: string; quiet?: boolean }) => Promise<unknown>
 }) {
   const lockedStatus: ExpenseStatus = layout === 'plan' ? 'planned' : 'purchased'
   const [form, setForm] = useState<ExpenseFormData>({
@@ -299,7 +290,7 @@ function ExpenseForm({
       ...nextForm,
       status: lockedStatus,
     }
-    if (!isMeaningful(locked) && !id) return id
+    if (!isMeaningful(locked)) return id
     setSaveState('saving')
     try {
       if (!id) {
@@ -355,8 +346,6 @@ function ExpenseForm({
     let id = savedIdRef.current
     if (isMeaningful(current)) {
       id = await persist(current, id)
-    } else if (id) {
-      await softDeleteExpense({ id, quiet: true })
     }
     onClose()
   }

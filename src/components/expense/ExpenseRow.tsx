@@ -24,7 +24,8 @@ export function ExpenseRow({ expense, showRoom = true, showCategory = true }: Ex
   const [menuOpen, setMenuOpen] = useState(false)
 
   const total = getExpenseTotal(expense)
-  const canPurchase = expense.status === 'planned' || expense.status === 'quoted'
+  const canPurchase =
+    expense.status === 'planned' || expense.status === 'quoted' || expense.status === 'ordered'
   const isPurchase = expense.status === 'purchased' || expense.status === 'paid'
   const paidBy = members.find((m) => m.id === expense.who_paid)
   const paidByName =

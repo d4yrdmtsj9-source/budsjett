@@ -1,7 +1,7 @@
 /**
  * Local-first store for Renover.
- * Data lives in IndexedDB, is mirrored to the cloud snapshot, and also
- * syncs live over Supabase Realtime broadcast when both devices are open.
+ * Data lives in IndexedDB and is merged in the cloud by invite code.
+ * Live updates also go over Supabase Realtime when both devices are open.
  */
 
 const DB_NAME = 'renover-db'
@@ -158,7 +158,15 @@ export function normalizeProject(project: LocalProject): LocalProject {
   return {
     ...project,
     members: project.members.map(normalizeMember),
+    expenses: project.expenses.map(normalizeExpense),
   }
+}
+
+function normalizeExpense(expense: LocalExpense): LocalExpense {
+  let status = expense.status
+  if (status === 'quoted' || status === 'ordered') status = 'planned'
+  if (status === 'paid') status = 'purchased'
+  return { ...expense, status }
 }
 
 const DEVICE_KEY_LS = 'renover-device-key'

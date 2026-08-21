@@ -1,4 +1,5 @@
 import type { LocalProject } from '@/lib/localStore'
+import { mergeProjects, projectFingerprint } from '@/lib/mergeProjects'
 
 const NS = 'renover-budsjett-0a6e'
 const KEY = (import.meta.env.VITE_MANTLE_KEY as string | undefined) ?? ''
@@ -85,15 +86,26 @@ export function scheduleCloudPush(project: LocalProject) {
   }, 600)
 }
 
-/** Keep the newer snapshot; push local when the cloud is missing or stale. */
+/** Merge local + cloud so two devices don't overwrite each other's rows. */
 export async function mergeCloudProject(
   local: LocalProject | null,
   inviteCode: string | undefined,
 ): Promise<LocalProject | null> {
   const cloud = inviteCode ? await pullCloudProject(inviteCode) : null
-  if (cloud && (!local || new Date(cloud.updated_at) >= new Date(local.updated_at))) {
-    return cloud
+  if (!local && !cloud) return null
+  if (!cloud) {
+    if (local) void pushCloudProject(local)
+    return local
   }
-  if (local) void pushCloudProject(local)
-  return local
+  if (!local) return cloud
+  if (local.id !== cloud.id) {
+    const newer = new Date(cloud.updated_at) >= new Date(local.updated_at) ? cloud : local
+    if (newer === local) void pushCloudProject(local)
+    return newer
+  }
+  const merged = mergeProjects(local, cloud)
+  if (projectFingerprint(merged) !== projectFingerprint(cloud)) {
+    void pushCloudProject(merged)
+  }
+  return merged
 }
