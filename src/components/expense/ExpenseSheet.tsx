@@ -472,14 +472,6 @@ function ExpenseForm({
             </div>
           </div>
 
-          <Select
-            label="Betalt av"
-            value={form.who_paid}
-            onChange={(e) => update({ who_paid: e.target.value })}
-            options={memberOptions}
-            placeholder="Velg person"
-          />
-
           <Input
             label="Leverandør"
             value={form.supplier}
@@ -487,6 +479,36 @@ function ExpenseForm({
             placeholder="F.eks. Byggmakker"
           />
 
+          <Select
+            label="Betalt av"
+            value={form.who_paid}
+            onChange={(e) => update({ who_paid: e.target.value })}
+            options={memberOptions}
+            placeholder="Velg person"
+          />
+        </>
+      )}
+
+      <Select
+        label="Rom"
+        value={form.room_id ?? ''}
+        onChange={(e) => update({ room_id: e.target.value || null })}
+        options={roomOptions}
+        placeholder="Velg rom"
+      />
+
+      <Select
+        label="Kategori"
+        value={form.category_id ?? ''}
+        onChange={(e) => update({ category_id: e.target.value || null })}
+        options={categoryOptions}
+        placeholder="Velg kategori"
+      />
+
+      <InlineNewCategory onCreated={(id) => update({ category_id: id })} />
+
+      {(layout === 'buy' || layout === 'convert') && (
+        <>
           <button
             type="button"
             onClick={() => setShowDiscount(!showDiscount)}
@@ -534,24 +556,6 @@ function ExpenseForm({
           />
         </>
       )}
-
-      <Select
-        label="Rom"
-        value={form.room_id ?? ''}
-        onChange={(e) => update({ room_id: e.target.value || null })}
-        options={roomOptions}
-        placeholder="Velg rom"
-      />
-
-      <Select
-        label="Kategori"
-        value={form.category_id ?? ''}
-        onChange={(e) => update({ category_id: e.target.value || null })}
-        options={categoryOptions}
-        placeholder="Velg kategori"
-      />
-
-      <InlineNewCategory onCreated={(id) => update({ category_id: id })} />
 
       <Button type="submit" size="lg" className="w-full">
         Ferdig
