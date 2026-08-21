@@ -1,0 +1,49 @@
+const nokFormatter = new Intl.NumberFormat('nb-NO', {
+  style: 'currency',
+  currency: 'NOK',
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 0,
+})
+
+const nokFormatterPrecise = new Intl.NumberFormat('nb-NO', {
+  style: 'currency',
+  currency: 'NOK',
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+})
+
+export function formatNOK(amount: number, precise = false): string {
+  return precise ? nokFormatterPrecise.format(amount) : nokFormatter.format(amount)
+}
+
+export function formatPercent(value: number): string {
+  return `${Math.round(value)} %`
+}
+
+export function formatDate(date: string | null | undefined): string {
+  if (!date) return '—'
+  return new Date(date).toLocaleDateString('nb-NO', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  })
+}
+
+export function formatRelativeDate(date: string): string {
+  const now = new Date()
+  const then = new Date(date)
+  const diffMs = now.getTime() - then.getTime()
+  const diffMins = Math.floor(diffMs / 60000)
+  const diffHours = Math.floor(diffMs / 3600000)
+  const diffDays = Math.floor(diffMs / 86400000)
+
+  if (diffMins < 1) return 'Nå'
+  if (diffMins < 60) return `${diffMins} min siden`
+  if (diffHours < 24) return `${diffHours} t siden`
+  if (diffDays < 7) return `${diffDays} d siden`
+  return formatDate(date)
+}
+
+export function todayISO(): string {
+  return new Date().toISOString().split('T')[0]
+}
