@@ -114,9 +114,9 @@ export function DashboardPage() {
       {byRoom.length > 0 && (
         <section>
           <SectionHeader title="Per rom" to="/rom" />
-          <div className="space-y-2">
+          <div className="flex flex-col gap-3">
             {byRoom.map(({ room, spent }) => (
-              <Link key={room.id} to={`/rom/${room.id}`}>
+              <Link key={room.id} to={`/rom/${room.id}`} className="block">
                 <Card padding="sm">
                   <div className="flex justify-between items-center mb-2">
                     <span className="font-medium text-sm">{room.name}</span>

@@ -80,12 +80,12 @@ export function RoomsPage() {
           }
         />
       ) : (
-        <div className="space-y-3">
+        <div className="flex flex-col gap-3">
           {rooms.map((room) => {
             const roomExpenses = expenses.filter((e) => e.room_id === room.id)
             const spent = roomExpenses.reduce((s, e) => s + getExpenseTotal(e), 0)
             return (
-              <Link key={room.id} to={`/rom/${room.id}`}>
+              <Link key={room.id} to={`/rom/${room.id}`} className="block">
                 <Card>
                   <div className="flex justify-between items-start mb-3">
                     <div>
