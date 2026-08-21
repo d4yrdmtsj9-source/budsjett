@@ -5,7 +5,7 @@ import { ExpenseSheet } from '@/components/expense/ExpenseSheet'
 
 export function AppLayout() {
   return (
-    <div className="min-h-dvh pb-28">
+    <div className="min-h-dvh pb-40">
       <main className="mx-auto max-w-lg px-4 pt-4 safe-top">
         <Outlet />
       </main>

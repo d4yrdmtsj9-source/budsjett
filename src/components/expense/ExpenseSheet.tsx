@@ -51,10 +51,10 @@ function savePrefs(form: ExpenseFormData) {
 }
 
 function isMeaningful(form: ExpenseFormData) {
+  // Default quantity: 1 alone must not count — open/close would leave empty drafts.
   return (
     form.description.trim().length > 0 ||
     form.unit_price > 0 ||
-    form.quantity > 0 ||
     (form.total_override != null && form.total_override > 0) ||
     !!form.supplier.trim()
   )

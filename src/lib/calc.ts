@@ -44,9 +44,10 @@ export function sumExpenses(expenses: Expense[]): number {
   return expenses.reduce((sum, e) => sum + getExpenseTotal(e), 0)
 }
 
+/** Sum of bought/spent amounts (`purchased` + `paid`). */
 export function sumPaidExpenses(expenses: Expense[]): number {
   return expenses
-    .filter((e) => e.status === 'paid')
+    .filter((e) => e.status === 'purchased' || e.status === 'paid')
     .reduce((sum, e) => sum + getExpenseTotal(e), 0)
 }
 

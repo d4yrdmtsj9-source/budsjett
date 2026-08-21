@@ -6,26 +6,31 @@ import { ExpenseList } from '@/components/expense/ExpenseRow'
 import { useExpenses } from '@/hooks/useExpenses'
 import { useRooms } from '@/hooks/useRooms'
 import { useCategories } from '@/hooks/useCategories'
-import { EXPENSE_STATUS_LABELS, type ExpenseStatus } from '@/lib/types'
 import { getExpenseTotal } from '@/lib/calc'
 import { cn } from '@/lib/utils'
 
 type SortKey = 'date' | 'amount' | 'description'
+type StatusFilter = '' | 'planned' | 'bought'
 
 export function ExpensesPage() {
   const [search, setSearch] = useState('')
   const [roomFilter, setRoomFilter] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('')
-  const [statusFilter, setStatusFilter] = useState<ExpenseStatus | ''>('')
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('')
   const [sortBy, setSortBy] = useState<SortKey>('date')
   const [showFilters, setShowFilters] = useState(false)
 
-  const { expenses, isLoading } = useExpenses({
+  const { expenses: allExpenses, isLoading } = useExpenses({
     roomId: roomFilter || undefined,
     categoryId: categoryFilter || undefined,
-    status: statusFilter || undefined,
+    status: statusFilter === 'planned' ? 'planned' : undefined,
     search,
   })
+
+  const expenses = useMemo(() => {
+    if (statusFilter !== 'bought') return allExpenses
+    return allExpenses.filter((e) => e.status === 'purchased' || e.status === 'paid')
+  }, [allExpenses, statusFilter])
 
   const { data: rooms } = useRooms()
   const { data: categories } = useCategories()
@@ -48,8 +53,9 @@ export function ExpensesPage() {
   }, [expenses, sortBy])
 
   const statusOptions = [
-    { value: '', label: 'Alle statuser' },
-    ...Object.entries(EXPENSE_STATUS_LABELS).map(([value, label]) => ({ value, label })),
+    { value: '', label: 'Alle' },
+    { value: 'planned', label: 'Planlagt' },
+    { value: 'bought', label: 'Kjøpt' },
   ]
 
   if (isLoading) return <LoadingSpinner />
@@ -104,7 +110,7 @@ export function ExpensesPage() {
           <Select
             label="Status"
             value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value as ExpenseStatus | '')}
+            onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
             options={statusOptions}
           />
           <Select

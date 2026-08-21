@@ -12,7 +12,7 @@ import { ExpenseList } from '@/components/expense/ExpenseRow'
 import { useRoom, useRooms } from '@/hooks/useRooms'
 import { useExpenses } from '@/hooks/useExpenses'
 import { useExpenseSheet } from '@/hooks/useExpenseSheet'
-import { getExpenseTotal } from '@/lib/calc'
+import { getExpenseTotal, sumPaidExpenses } from '@/lib/calc'
 import { formatNOK } from '@/lib/format'
 
 export function RoomDetailPage() {
@@ -27,10 +27,8 @@ export function RoomDetailPage() {
   const [saving, setSaving] = useState(false)
 
   const roomExpenses = expenses.filter((e) => e.room_id === roomId)
-  const spent = roomExpenses.reduce((s, e) => s + getExpenseTotal(e), 0)
-  const paid = roomExpenses
-    .filter((e) => e.status === 'paid')
-    .reduce((s, e) => s + getExpenseTotal(e), 0)
+  const plannedTotal = roomExpenses.reduce((s, e) => s + getExpenseTotal(e), 0)
+  const bought = sumPaidExpenses(roomExpenses)
 
   const openEditSheet = () => {
     if (room) {
@@ -96,32 +94,44 @@ export function RoomDetailPage() {
             <p className="font-display text-lg font-semibold">{formatNOK(room.budget)}</p>
           </div>
           <div>
-            <p className="text-xs text-muted">Projisert</p>
-            <p className="font-display text-lg font-semibold">{formatNOK(spent)}</p>
+            <p className="text-xs text-muted">Kjøpt</p>
+            <p className="font-display text-lg font-semibold">{formatNOK(bought)}</p>
           </div>
           <div>
-            <p className="text-xs text-muted">Betalt</p>
-            <p className="font-display text-lg font-semibold">{formatNOK(paid)}</p>
+            <p className="text-xs text-muted">Planlagt totalt</p>
+            <p className="font-display text-lg font-semibold">{formatNOK(plannedTotal)}</p>
           </div>
           <div>
             <p className="text-xs text-muted">Gjenstår</p>
             <p className="font-display text-lg font-semibold">
-              {formatNOK(room.budget - spent)}
+              {formatNOK(room.budget - plannedTotal)}
             </p>
           </div>
         </div>
         <ProgressBar
-          value={spent}
+          value={plannedTotal}
           max={room.budget}
           showLabel
         />
       </Card>
 
-      <div className="flex justify-between items-center">
+      <div className="flex justify-between items-center gap-2">
         <h2 className="font-display font-semibold">Utgifter</h2>
-        <Button size="sm" onClick={() => openNew(roomId)}>
-          Legg til
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => openNew({ roomId, status: 'planned' })}
+          >
+            Planlegg
+          </Button>
+          <Button
+            size="sm"
+            onClick={() => openNew({ roomId, status: 'purchased' })}
+          >
+            Kjøp
+          </Button>
+        </div>
       </div>
 
       <ExpenseList

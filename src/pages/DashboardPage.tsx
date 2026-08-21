@@ -5,7 +5,6 @@ import {
   Wallet,
   PiggyBank,
   ArrowRight,
-  Activity,
 } from 'lucide-react'
 import { Card, CardHeader, CardTitle } from '@/components/ui/Card'
 import { ProgressBar } from '@/components/ui/ProgressBar'
@@ -14,8 +13,6 @@ import { ExpenseList } from '@/components/expense/ExpenseRow'
 import { useProject } from '@/hooks/useProject'
 import { useExpenses } from '@/hooks/useExpenses'
 import { useRooms } from '@/hooks/useRooms'
-import { useCategories } from '@/hooks/useCategories'
-import { useActivity, formatActivityMessage } from '@/hooks/useActivity'
 import {
   getExpenseTotal,
   sumPaidExpenses,
@@ -23,19 +20,17 @@ import {
   budgetProgress,
   remainingBudget,
 } from '@/lib/calc'
-import { formatNOK, formatRelativeDate } from '@/lib/format'
+import { formatNOK } from '@/lib/format'
 
 export function DashboardPage() {
   const { project } = useProject()
   const { expenses, isLoading } = useExpenses()
   const { data: rooms } = useRooms()
-  const { data: categories } = useCategories()
-  const { data: activity } = useActivity(10)
 
   const stats = useMemo(() => {
     const totalBudget = project?.total_budget ?? 0
     const projected = sumProjectedExpenses(expenses)
-    const paid = sumPaidExpenses(expenses)
+    const bought = sumPaidExpenses(expenses)
     const remaining = remainingBudget(totalBudget, projected)
     const progress = budgetProgress(projected, totalBudget)
     const underBudget = totalBudget - projected
@@ -46,7 +41,7 @@ export function DashboardPage() {
       return sum
     }, 0)
 
-    return { totalBudget, projected, paid, remaining, progress, underBudget, discountSavings }
+    return { totalBudget, projected, bought, remaining, progress, underBudget, discountSavings }
   }, [project, expenses])
 
   const byRoom = useMemo(() => {
@@ -56,14 +51,6 @@ export function DashboardPage() {
       return { room, spent, progress: budgetProgress(spent, room.budget) }
     })
   }, [rooms, expenses])
-
-  const byCategory = useMemo(() => {
-    return (categories ?? []).map((cat) => {
-      const catExpenses = expenses.filter((e) => e.category_id === cat.id)
-      const spent = catExpenses.reduce((s, e) => s + getExpenseTotal(e), 0)
-      return { category: cat, spent, progress: budgetProgress(spent, cat.budget) }
-    })
-  }, [categories, expenses])
 
   const recentPurchases = useMemo(
     () =>
@@ -75,11 +62,6 @@ export function DashboardPage() {
           return db.localeCompare(da)
         })
         .slice(0, 5),
-    [expenses],
-  )
-
-  const largestExpenses = useMemo(
-    () => [...expenses].sort((a, b) => getExpenseTotal(b) - getExpenseTotal(a)).slice(0, 5),
     [expenses],
   )
 
@@ -100,8 +82,8 @@ export function DashboardPage() {
       <Card padding="lg" className="bg-gradient-to-br from-primary/10 to-primary/5 border-primary/10">
         <div className="grid grid-cols-2 gap-4">
           <StatItem icon={Wallet} label="Budsjett" value={formatNOK(stats.totalBudget)} />
-          <StatItem icon={TrendingDown} label="Betalt" value={formatNOK(stats.paid)} />
-          <StatItem label="Projisert" value={formatNOK(stats.projected)} />
+          <StatItem icon={TrendingDown} label="Kjøpt" value={formatNOK(stats.bought)} />
+          <StatItem label="Planlagt totalt" value={formatNOK(stats.projected)} />
           <StatItem
             label="Gjenstår"
             value={formatNOK(stats.remaining)}
@@ -150,59 +132,15 @@ export function DashboardPage() {
         </section>
       )}
 
-      {byCategory.length > 0 && (
-        <section>
-          <SectionHeader title="Per kategori" />
-          <div className="space-y-2">
-            {byCategory.map(({ category, spent }) => (
-              <Card key={category.id} padding="sm">
-                <div className="flex justify-between items-center mb-2">
-                  <span className="font-medium text-sm">{category.name}</span>
-                  <span className="text-sm text-muted">
-                    {formatNOK(spent)} / {formatNOK(category.budget)}
-                  </span>
-                </div>
-                <ProgressBar value={spent} max={category.budget} size="sm" />
-              </Card>
-            ))}
-          </div>
-        </section>
-      )}
-
       <section>
         <SectionHeader title="Siste kjøp" to="/utgifter" />
         <ExpenseList expenses={recentPurchases} emptyMessage="Ingen kjøp ennå" />
       </section>
 
-      {largestExpenses.length > 0 && (
-        <section>
-          <SectionHeader title="Største utgifter" />
-          <ExpenseList expenses={largestExpenses} />
-        </section>
-      )}
-
       {plannedExpenses.length > 0 && (
         <section>
-          <SectionHeader title="Planlagte utgifter" />
+          <SectionHeader title="Planlagte" />
           <ExpenseList expenses={plannedExpenses} />
-        </section>
-      )}
-
-      {(activity ?? []).length > 0 && (
-        <section>
-          <SectionHeader title="Aktivitet" icon={Activity} />
-          <Card>
-            <div className="space-y-3">
-              {(activity ?? []).map((event) => (
-                <div key={event.id} className="flex justify-between gap-3 text-sm">
-                  <span>{formatActivityMessage(event)}</span>
-                  <span className="text-muted shrink-0 text-xs">
-                    {formatRelativeDate(event.created_at)}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </Card>
         </section>
       )}
     </div>
@@ -236,16 +174,13 @@ function StatItem({
 function SectionHeader({
   title,
   to,
-  icon: Icon,
 }: {
   title: string
   to?: string
-  icon?: React.ComponentType<{ className?: string }>
 }) {
   return (
     <CardHeader>
       <CardTitle className="flex items-center gap-2 text-base">
-        {Icon && <Icon className="h-4 w-4 text-primary" />}
         {title}
       </CardTitle>
       {to && (

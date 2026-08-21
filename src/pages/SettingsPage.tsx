@@ -155,8 +155,7 @@ export function SettingsPage() {
               </Button>
             </div>
             <p className="text-xs text-muted mt-2">
-              Partner / ny PC: «Åpne / bli med» → skriv koden → velg «Fortsett som [navn]». Begge bør
-              ha appen åpen første gang. Ellers: eksporter/importer sikkerhetskopi.
+              Begge må ha appen åpen for live synk. Ellers: eksporter/importer.
             </p>
           </div>
 
