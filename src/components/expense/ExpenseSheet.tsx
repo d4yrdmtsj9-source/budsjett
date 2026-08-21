@@ -253,6 +253,10 @@ function ExpenseForm({
         placeholder="Velg kategori"
       />
 
+      <InlineNewCategory
+        onCreated={(id) => update({ category_id: id })}
+      />
+
       <button
         type="button"
         onClick={() => setShowDiscount(!showDiscount)}
@@ -364,5 +368,75 @@ function ExpenseForm({
         {saving ? 'Lagrer...' : isEditing ? 'Oppdater utgift' : 'Legg til utgift'}
       </Button>
     </form>
+  )
+}
+
+function InlineNewCategory({ onCreated }: { onCreated: (id: string) => void }) {
+  const { createCategory } = useCategories()
+  const [open, setOpen] = useState(false)
+  const [name, setName] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="text-sm text-primary font-medium"
+      >
+        + Ny kategori
+      </button>
+    )
+  }
+
+  return (
+    <div className="rounded-xl border border-border bg-white/70 p-3 space-y-3">
+      <Input
+        label="Ny kategori"
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder="F.eks. Materialer"
+        autoFocus
+      />
+      <div className="flex gap-2">
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          className="flex-1"
+          onClick={() => {
+            setOpen(false)
+            setName('')
+          }}
+        >
+          Avbryt
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          className="flex-1"
+          disabled={saving || !name.trim()}
+          onClick={async () => {
+            setSaving(true)
+            try {
+              const cat = await createCategory.mutateAsync({
+                name: name.trim(),
+                budget: 0,
+              })
+              onCreated(cat.id)
+              toast.success('Kategori lagt til')
+              setOpen(false)
+              setName('')
+            } catch (err) {
+              toast.error(err instanceof Error ? err.message : 'Kunne ikke legge til')
+            } finally {
+              setSaving(false)
+            }
+          }}
+        >
+          {saving ? 'Lagrer...' : 'Lagre'}
+        </Button>
+      </div>
+    </div>
   )
 }

@@ -119,6 +119,13 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       }
       const project = emptyProject(name.trim() || 'Vår renovering', budget || 0, invite)
       project.members = [member]
+      project.categories = [
+        { id: uid(), name: 'Materialer', budget: 0 },
+        { id: uid(), name: 'Arbeid', budget: 0 },
+        { id: uid(), name: 'Apparater', budget: 0 },
+        { id: uid(), name: 'Møbler', budget: 0 },
+        { id: uid(), name: 'Annet', budget: 0 },
+      ]
       project.activity = [
         {
           id: uid(),

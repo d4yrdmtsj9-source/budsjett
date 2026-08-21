@@ -1,6 +1,7 @@
 import { NavLink } from 'react-router-dom'
 import { Home, DoorOpen, Receipt, Truck, Settings } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useKeyboardOffset } from '@/hooks/useKeyboardOffset'
 
 const navItems = [
   { to: '/', icon: Home, label: 'Hjem' },
@@ -11,8 +12,15 @@ const navItems = [
 ]
 
 export function BottomNav() {
+  const { offset, keyboardOpen } = useKeyboardOffset(true)
+
+  if (keyboardOpen) return null
+
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-40 safe-bottom">
+    <nav
+      className="fixed bottom-0 left-0 right-0 z-40 safe-bottom"
+      style={{ bottom: offset }}
+    >
       <div className="mx-auto max-w-lg">
         <div className="mx-3 mb-3 rounded-2xl bg-white/90 backdrop-blur-xl border border-white/80 shadow-lg">
           <div className="flex items-stretch">

@@ -1,20 +1,39 @@
 import { useState } from 'react'
-import { Copy, Check, LogOut, User, Users, Wallet } from 'lucide-react'
+import { Copy, Check, LogOut, User, Users, Wallet, Tags, Plus } from 'lucide-react'
 import { toast } from 'sonner'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
+import { Sheet } from '@/components/ui/Sheet'
 import { useAuth } from '@/hooks/useAuth'
 import { useProject } from '@/hooks/useProject'
+import { useCategories } from '@/hooks/useCategories'
+import { formatNOK } from '@/lib/format'
+
+const CATEGORY_SUGGESTIONS = [
+  'Materialer',
+  'Arbeid',
+  'Apparater',
+  'Møbler',
+  'Belysning',
+  'VVS',
+  'Elektro',
+  'Maleri',
+  'Annet',
+]
 
 export function SettingsPage() {
   const { profile, signOut, updateDisplayName } = useAuth()
   const { project, members, updateProject, rawProject, setRawProject } = useProject()
+  const { data: categories, createCategory } = useCategories()
   const [name, setName] = useState(profile?.display_name ?? '')
   const [projectName, setProjectName] = useState(project?.name ?? '')
   const [budget, setBudget] = useState(String(project?.total_budget ?? 0))
   const [copied, setCopied] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [showAddCategory, setShowAddCategory] = useState(false)
+  const [categoryName, setCategoryName] = useState('')
+  const [categoryBudget, setCategoryBudget] = useState('')
 
   const handleSaveName = async () => {
     setSaving(true)
@@ -46,6 +65,29 @@ export function SettingsPage() {
   const handleSignOut = async () => {
     await signOut()
     toast.success('Du er nå logget ut')
+  }
+
+  const handleCreateCategory = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!categoryName.trim()) {
+      toast.error('Skriv inn kategorinavn')
+      return
+    }
+    setSaving(true)
+    try {
+      await createCategory.mutateAsync({
+        name: categoryName,
+        budget: parseFloat(categoryBudget) || 0,
+      })
+      toast.success('Kategori lagt til')
+      setShowAddCategory(false)
+      setCategoryName('')
+      setCategoryBudget('')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Kunne ikke legge til kategori')
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
@@ -159,6 +201,44 @@ export function SettingsPage() {
       </section>
 
       <section>
+        <div className="flex items-center justify-between gap-2 mb-2">
+          <div className="flex items-center gap-2">
+            <Tags className="h-4 w-4 text-primary" />
+            <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+              Kategorier
+            </h2>
+          </div>
+          <Button size="sm" onClick={() => setShowAddCategory(true)}>
+            <Plus className="h-4 w-4" />
+            Ny
+          </Button>
+        </div>
+        <Card>
+          {!categories?.length ? (
+            <div className="text-center py-4 space-y-3">
+              <p className="text-sm text-muted">Ingen kategorier ennå</p>
+              <Button size="sm" onClick={() => setShowAddCategory(true)}>
+                <Plus className="h-4 w-4" />
+                Legg til kategori
+              </Button>
+            </div>
+          ) : (
+            <ul className="divide-y divide-border">
+              {categories.map((cat) => (
+                <li
+                  key={cat.id}
+                  className="flex items-center justify-between py-3 first:pt-0 last:pb-0"
+                >
+                  <span className="font-medium text-sm">{cat.name}</span>
+                  <span className="text-xs text-muted">{formatNOK(cat.budget)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+      </section>
+
+      <section>
         <SectionLabel icon={Users} label="Medlemmer" />
         <Card>
           <div className="space-y-3">
@@ -187,6 +267,47 @@ export function SettingsPage() {
         <LogOut className="h-4 w-4" />
         Logg ut
       </Button>
+
+      <Sheet
+        open={showAddCategory}
+        onClose={() => setShowAddCategory(false)}
+        title="Ny kategori"
+      >
+        <form onSubmit={handleCreateCategory} className="space-y-4 pb-6">
+          <Input
+            label="Navn"
+            value={categoryName}
+            onChange={(e) => setCategoryName(e.target.value)}
+            placeholder="F.eks. Materialer"
+            required
+            autoFocus
+          />
+          <div className="flex flex-wrap gap-2">
+            {CATEGORY_SUGGESTIONS.filter(
+              (s) => !categories?.some((c) => c.name.toLowerCase() === s.toLowerCase()),
+            ).map((s) => (
+              <button
+                key={s}
+                type="button"
+                onClick={() => setCategoryName(s)}
+                className="rounded-full border border-border bg-white/70 px-3 py-1.5 text-xs font-medium text-foreground/80 hover:border-primary/40 hover:text-primary"
+              >
+                {s}
+              </button>
+            ))}
+          </div>
+          <Input
+            label="Budsjett (NOK)"
+            type="number"
+            value={categoryBudget}
+            onChange={(e) => setCategoryBudget(e.target.value)}
+            placeholder="0"
+          />
+          <Button type="submit" size="lg" className="w-full" disabled={saving}>
+            {saving ? 'Lagrer...' : 'Legg til kategori'}
+          </Button>
+        </form>
+      </Sheet>
     </div>
   )
 }

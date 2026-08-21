@@ -36,6 +36,8 @@ html {
   font-family: var(--font-body);
   color: oklch(0.25 0.02 178);
   background: oklch(0.97 0.008 178);
+  /* Help iOS keep focused fields above the keyboard */
+  scroll-padding-bottom: 40vh;
 }
 
 body {
