@@ -31,7 +31,7 @@ export function ExpenseRow({ expense, showRoom = true, showCategory = true }: Ex
     paidBy?.profile?.display_name ?? paidBy?.display_name ?? null
 
   return (
-    <Card padding="sm" className="relative">
+    <Card padding="sm" className={cn('relative', menuOpen && 'z-[45]')}>
       <div className="flex items-start gap-2">
         <button type="button" onClick={() => openEdit(expense)} className="flex-1 text-left min-w-0">
           <div className="flex items-start justify-between gap-2">
@@ -107,8 +107,8 @@ export function ExpenseRow({ expense, showRoom = true, showCategory = true }: Ex
             </button>
             {menuOpen && (
               <>
-                <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
-                <div className="absolute right-0 top-full mt-1 z-20 w-40 rounded-xl bg-white shadow-lg border border-border py-1 animate-fade-in">
+                <div className="fixed inset-0 z-[44]" onClick={() => setMenuOpen(false)} />
+                <div className="absolute right-0 top-full mt-1 z-[45] w-40 rounded-xl bg-white shadow-lg border border-border py-1 animate-fade-in">
                   <MenuItem
                     icon={Pencil}
                     label="Rediger"
