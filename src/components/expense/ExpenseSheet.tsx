@@ -20,7 +20,7 @@ import {
   getExpenseTotal,
 } from '@/lib/calc'
 import { formatNOK } from '@/lib/format'
-import type { Expense, ExpenseFormData, ExpenseStatus } from '@/lib/types'
+import { DEFAULT_UNITS, type Expense, type ExpenseFormData, type ExpenseStatus } from '@/lib/types'
 import type { LocalExpense } from '@/lib/localStore'
 
 const PREFS_KEY = 'renover-expense-prefs'
@@ -54,6 +54,7 @@ function isMeaningful(form: ExpenseFormData) {
   return (
     form.description.trim().length > 0 ||
     form.unit_price > 0 ||
+    form.quantity > 0 ||
     (form.total_override != null && form.total_override > 0) ||
     !!form.supplier.trim()
   )
@@ -77,6 +78,50 @@ function resolveLayout(
     return editing.status === 'purchased' || editing.status === 'paid' ? 'buy' : 'plan'
   }
   return defaultStatus === 'purchased' ? 'buy' : 'plan'
+}
+
+function QtyPriceFields({
+  form,
+  priceRef,
+  priceLabel,
+  onUpdate,
+}: {
+  form: ExpenseFormData
+  priceRef: React.RefObject<HTMLInputElement | null>
+  priceLabel: string
+  onUpdate: (patch: Partial<ExpenseFormData>) => void
+}) {
+  return (
+    <div className="grid grid-cols-3 gap-3">
+      <Input
+        label="Antall"
+        type="number"
+        min={0}
+        step="any"
+        value={form.quantity || ''}
+        onChange={(e) =>
+          onUpdate({ quantity: parseFloat(e.target.value) || 0, total_override: null })
+        }
+      />
+      <Select
+        label="Enhet"
+        value={form.unit}
+        onChange={(e) => onUpdate({ unit: e.target.value })}
+        options={DEFAULT_UNITS.map((u) => ({ value: u, label: u }))}
+      />
+      <Input
+        ref={priceRef}
+        label={priceLabel}
+        type="number"
+        min={0}
+        step="any"
+        value={form.unit_price || ''}
+        onChange={(e) =>
+          onUpdate({ unit_price: parseFloat(e.target.value) || 0, total_override: null })
+        }
+      />
+    </div>
+  )
 }
 
 export function ExpenseSheet() {
@@ -115,19 +160,15 @@ export function ExpenseSheet() {
         ...initialForm,
         status: 'purchased',
         who_paid: memberId ?? initialForm.who_paid,
-        quantity: 1,
-        unit: 'stk',
-        // Keep estimate as starting amount (unit_price already set)
+        // Keep planned quantity / unit / unit_price as starting point
       }
     } else if (layout === 'plan') {
-      initialForm = { ...initialForm, status: 'planned', quantity: 1, unit: 'stk' }
+      initialForm = { ...initialForm, status: 'planned' }
     } else {
       initialForm = {
         ...initialForm,
         status: initialForm.status === 'paid' ? 'paid' : 'purchased',
         who_paid: initialForm.who_paid || memberId || '',
-        quantity: 1,
-        unit: 'stk',
       }
     }
   } else {
@@ -137,7 +178,7 @@ export function ExpenseSheet() {
       room_id: defaultRoomId ?? prefs.room_id ?? null,
       description: '',
       quantity: 1,
-      unit: 'stk',
+      unit: prefs.unit || 'stk',
       unit_price: 0,
       total_override: null,
       discount_percent: null,
@@ -168,6 +209,10 @@ export function ExpenseSheet() {
       ? {
           description: editingExpense.description,
           estimate: getExpenseTotal(editingExpense),
+          qtyHint:
+            editingExpense.quantity > 0
+              ? `${editingExpense.quantity} ${editingExpense.unit || 'stk'}`
+              : null,
         }
       : null
 
@@ -218,7 +263,11 @@ function ExpenseForm({
   expenseId: string | null
   layout: FormLayout
   focusField: 'description' | 'unit_price'
-  plannedSummary: { description: string; estimate: number } | null
+  plannedSummary: {
+    description: string
+    estimate: number
+    qtyHint: string | null
+  } | null
   roomOptions: { value: string; label: string }[]
   categoryOptions: { value: string; label: string }[]
   memberOptions: { value: string; label: string }[]
@@ -237,8 +286,6 @@ function ExpenseForm({
   const [form, setForm] = useState<ExpenseFormData>({
     ...initial,
     status: lockedStatus,
-    quantity: 1,
-    unit: 'stk',
   })
   const [savedId, setSavedId] = useState<string | null>(expenseId)
   const [showDiscount, setShowDiscount] = useState(
@@ -264,11 +311,9 @@ function ExpenseForm({
   }, [focusField])
 
   const persist = async (nextForm: ExpenseFormData, id: string | null) => {
-    const locked = {
+    const locked: ExpenseFormData = {
       ...nextForm,
       status: lockedStatus,
-      quantity: 1,
-      unit: 'stk',
     }
     if (!isMeaningful(locked) && !id) return id
     setSaveState('saving')
@@ -305,22 +350,16 @@ function ExpenseForm({
 
   const update = (patch: Partial<ExpenseFormData>) => {
     setForm((f) => {
-      const next = {
+      const next: ExpenseFormData = {
         ...f,
         ...patch,
         status: lockedStatus,
-        quantity: 1,
-        unit: 'stk',
       }
       formRef.current = next
       scheduleSave(next)
       return next
     })
     setSaveState((s) => (s === 'saved' ? 'idle' : s))
-  }
-
-  const setAmount = (value: number) => {
-    update({ unit_price: value, quantity: 1, unit: 'stk', total_override: null })
   }
 
   const flushAndClose = async () => {
@@ -371,11 +410,10 @@ function ExpenseForm({
         <div className="rounded-xl border border-border bg-white/70 px-4 py-3">
           <p className="text-xs text-muted uppercase tracking-wide">Fra plan</p>
           <p className="font-medium mt-0.5">{plannedSummary.description}</p>
-          {plannedSummary.estimate > 0 && (
-            <p className="text-sm text-muted mt-1">
-              Estimat {formatNOK(plannedSummary.estimate)}
-            </p>
-          )}
+          <p className="text-sm text-muted mt-1">
+            {plannedSummary.qtyHint ? `${plannedSummary.qtyHint} · ` : ''}
+            Estimat {formatNOK(plannedSummary.estimate)}
+          </p>
         </div>
       )}
 
@@ -389,27 +427,41 @@ function ExpenseForm({
         />
       )}
 
-      <Input
-        ref={priceRef}
-        label={layout === 'plan' ? 'Estimert beløp (NOK)' : 'Beløp (NOK)'}
-        type="number"
-        min={0}
-        step="any"
-        value={form.unit_price || ''}
-        onChange={(e) => setAmount(parseFloat(e.target.value) || 0)}
-        placeholder={layout === 'plan' ? 'Valgfritt' : '0'}
+      <QtyPriceFields
+        form={form}
+        priceRef={priceRef}
+        priceLabel={layout === 'plan' ? 'Pris/enhet' : 'Pris/enhet'}
+        onUpdate={update}
       />
+
+      {layout === 'plan' && (
+        <div className="rounded-xl bg-primary/5 border border-primary/10 p-4">
+          <div className="flex justify-between text-sm text-muted mb-1">
+            <span>
+              {form.quantity || 0} {form.unit || 'stk'} × {formatNOK(form.unit_price || 0)}
+            </span>
+          </div>
+          <div className="flex justify-between font-display text-lg font-semibold">
+            <span>Estimat</span>
+            <span className="text-primary">{formatNOK(total)}</span>
+          </div>
+        </div>
+      )}
 
       {(layout === 'buy' || layout === 'convert') && (
         <>
           <div className="rounded-xl bg-primary/5 border border-primary/10 p-4">
+            <div className="flex justify-between text-sm">
+              <span className="text-muted">Subtotal</span>
+              <span>{formatNOK(subtotal)}</span>
+            </div>
             {discount > 0 && (
-              <div className="flex justify-between text-sm mb-1 text-emerald-700">
+              <div className="flex justify-between text-sm mt-1 text-emerald-700">
                 <span>Rabatt</span>
                 <span>−{formatNOK(discount)}</span>
               </div>
             )}
-            <div className="flex justify-between font-display text-lg font-semibold">
+            <div className="flex justify-between font-display text-lg font-semibold mt-2 pt-2 border-t border-primary/10">
               <span>Totalt</span>
               <span className="text-primary">{formatNOK(total)}</span>
             </div>
@@ -476,10 +528,6 @@ function ExpenseForm({
             onChange={(e) => update({ expense_date: e.target.value })}
           />
         </>
-      )}
-
-      {layout === 'plan' && form.unit_price > 0 && (
-        <p className="text-sm text-muted">Estimat: {formatNOK(total)}</p>
       )}
 
       <Select

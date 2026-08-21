@@ -38,8 +38,16 @@ export function ExpenseRow({ expense, showRoom = true, showCategory = true }: Ex
             <div className="min-w-0">
               <p className="font-medium text-sm truncate">{expense.description}</p>
               <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-0.5">
+                {canPurchase && expense.quantity > 0 && (
+                  <span className="text-xs text-muted">
+                    {expense.quantity} {expense.unit || 'stk'}
+                  </span>
+                )}
                 {showRoom && expense.room && (
-                  <span className="text-xs text-muted">{expense.room.name}</span>
+                  <span className="text-xs text-muted">
+                    {canPurchase && expense.quantity > 0 ? '· ' : ''}
+                    {expense.room.name}
+                  </span>
                 )}
                 {showCategory && expense.category && (
                   <span className="text-xs text-muted">· {expense.category.name}</span>
