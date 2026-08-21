@@ -5,13 +5,13 @@ import { ExpenseSheet } from '@/components/expense/ExpenseSheet'
 
 export function AppLayout() {
   return (
-    <div className="h-full overflow-hidden">
-      <main className="h-full overflow-y-auto overscroll-y-contain mx-auto max-w-lg px-4 pt-4 pb-40 safe-top">
+    <>
+      <main className="mx-auto max-w-lg px-4 pt-4 pb-40 safe-top">
         <Outlet />
       </main>
       <FAB />
       <BottomNav />
       <ExpenseSheet />
-    </div>
+    </>
   )
 }

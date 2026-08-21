@@ -1,7 +1,7 @@
 import { NavLink } from 'react-router-dom'
 import { Home, DoorOpen, Receipt, Truck, Settings } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { useKeyboardOpen } from '@/hooks/useKeyboardOffset'
+import { useExpenseSheet } from '@/hooks/useExpenseSheet'
 
 const navItems = [
   { to: '/', icon: Home, label: 'Hjem' },
@@ -12,8 +12,8 @@ const navItems = [
 ]
 
 export function BottomNav() {
-  const keyboardOpen = useKeyboardOpen()
-  if (keyboardOpen) return null
+  const { isOpen } = useExpenseSheet()
+  if (isOpen) return null
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-40 safe-bottom">

@@ -214,18 +214,7 @@ export function ExpenseSheet() {
       : null
 
   return (
-    <Sheet
-      open={isOpen}
-      onClose={() => flushCloseRef.current()}
-      title={title}
-      footer={
-        isOpen ? (
-          <Button form="expense-form" type="submit" size="lg" className="w-full">
-            Ferdig
-          </Button>
-        ) : null
-      }
-    >
+    <Sheet open={isOpen} onClose={() => flushCloseRef.current()} title={title}>
       {isOpen && (
         <ExpenseForm
           key={formInstanceId}
@@ -393,12 +382,11 @@ function ExpenseForm({
 
   return (
     <form
-      id="expense-form"
       onSubmit={(e) => {
         e.preventDefault()
         void flushAndClose()
       }}
-      className="space-y-4 pb-4"
+      className="space-y-4"
     >
       <p className="text-xs text-muted -mt-1">{saveLabel}</p>
 
@@ -576,6 +564,10 @@ function ExpenseForm({
           />
         </>
       )}
+
+      <Button type="submit" size="lg" className="w-full">
+        Ferdig
+      </Button>
     </form>
   )
 }

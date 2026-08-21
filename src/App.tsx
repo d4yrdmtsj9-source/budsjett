@@ -4,7 +4,6 @@ import { Toaster } from 'sonner'
 import { AuthProvider } from '@/hooks/useAuth'
 import { ProjectProvider } from '@/hooks/useProject'
 import { ExpenseSheetProvider } from '@/hooks/useExpenseSheet'
-import { useVisualViewportHeight } from '@/hooks/useVisualViewportHeight'
 import { AuthGate } from '@/pages/AuthPage'
 import { AppLayout } from '@/components/layout/AppLayout'
 import { DashboardPage } from '@/pages/DashboardPage'
@@ -25,40 +24,36 @@ const queryClient = new QueryClient({
 })
 
 export default function App() {
-  useVisualViewportHeight()
-
   return (
     <QueryClientProvider client={queryClient}>
-      <div className="h-full">
-        <AuthProvider>
-          <ProjectProvider>
-            <ExpenseSheetProvider>
-              <HashRouter>
-                <AuthGate>
-                  <Routes>
-                    <Route element={<AppLayout />}>
-                      <Route index element={<DashboardPage />} />
-                      <Route path="rom" element={<RoomsPage />} />
-                      <Route path="rom/:roomId" element={<RoomDetailPage />} />
-                      <Route path="utgifter" element={<ExpensesPage />} />
-                      <Route path="leverandorer" element={<SuppliersPage />} />
-                      <Route path="leverandorer/:name" element={<SupplierDetailPage />} />
-                      <Route path="innstillinger" element={<SettingsPage />} />
-                    </Route>
-                    <Route path="*" element={<Navigate to="/" replace />} />
-                  </Routes>
-                </AuthGate>
-              </HashRouter>
-              <Toaster
-                position="top-center"
-                toastOptions={{
-                  className: 'font-body',
-                }}
-              />
-            </ExpenseSheetProvider>
-          </ProjectProvider>
-        </AuthProvider>
-      </div>
+      <AuthProvider>
+        <ProjectProvider>
+          <ExpenseSheetProvider>
+            <HashRouter>
+              <AuthGate>
+                <Routes>
+                  <Route element={<AppLayout />}>
+                    <Route index element={<DashboardPage />} />
+                    <Route path="rom" element={<RoomsPage />} />
+                    <Route path="rom/:roomId" element={<RoomDetailPage />} />
+                    <Route path="utgifter" element={<ExpensesPage />} />
+                    <Route path="leverandorer" element={<SuppliersPage />} />
+                    <Route path="leverandorer/:name" element={<SupplierDetailPage />} />
+                    <Route path="innstillinger" element={<SettingsPage />} />
+                  </Route>
+                  <Route path="*" element={<Navigate to="/" replace />} />
+                </Routes>
+              </AuthGate>
+            </HashRouter>
+            <Toaster
+              position="top-center"
+              toastOptions={{
+                className: 'font-body',
+              }}
+            />
+          </ExpenseSheetProvider>
+        </ProjectProvider>
+      </AuthProvider>
     </QueryClientProvider>
   )
 }
