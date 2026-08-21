@@ -7,7 +7,9 @@ import { useExpenses } from '@/hooks/useExpenses'
 import { useRooms } from '@/hooks/useRooms'
 import { useCategories } from '@/hooks/useCategories'
 import { getExpenseTotal } from '@/lib/calc'
+import { formatNOK } from '@/lib/format'
 import { cn } from '@/lib/utils'
+import type { Expense } from '@/lib/types'
 
 type SortKey = 'date' | 'amount' | 'description'
 type StatusFilter = '' | 'planned' | 'bought'
@@ -41,7 +43,7 @@ export function ExpensesPage() {
       case 'amount':
         return list.sort((a, b) => getExpenseTotal(b) - getExpenseTotal(a))
       case 'description':
-        return list.sort((a, b) => a.description.localeCompare(b.description))
+        return list.sort((a, b) => a.description.localeCompare(b.description, 'nb'))
       case 'date':
       default:
         return list.sort((a, b) => {
@@ -51,6 +53,25 @@ export function ExpensesPage() {
         })
     }
   }, [expenses, sortBy])
+
+  const groups = useMemo(() => {
+    const byId = new Map<string, { name: string; expenses: Expense[] }>()
+    for (const cat of categories ?? []) {
+      byId.set(cat.id, { name: cat.name, expenses: [] })
+    }
+    const uncategorized: Expense[] = []
+    for (const expense of sorted) {
+      const group = expense.category_id ? byId.get(expense.category_id) : undefined
+      if (group) group.expenses.push(expense)
+      else uncategorized.push(expense)
+    }
+    const listed = [...byId.values()].filter((g) => g.expenses.length > 0)
+    listed.sort((a, b) => a.name.localeCompare(b.name, 'nb'))
+    if (uncategorized.length > 0) {
+      listed.push({ name: 'Uten kategori', expenses: uncategorized })
+    }
+    return listed
+  }, [sorted, categories])
 
   const statusOptions = [
     { value: '', label: 'Alle' },
@@ -126,7 +147,27 @@ export function ExpensesPage() {
         </div>
       )}
 
-      <ExpenseList expenses={sorted} emptyMessage="Ingen utgifter funnet" />
+      {groups.length === 0 ? (
+        <ExpenseList expenses={[]} emptyMessage="Ingen utgifter funnet" />
+      ) : (
+        <div className="space-y-6">
+          {groups.map((group) => {
+            const total = group.expenses.reduce((sum, e) => sum + getExpenseTotal(e), 0)
+            return (
+              <section key={group.name}>
+                <div className="flex items-baseline justify-between gap-3 mb-2">
+                  <h2 className="font-display font-semibold">{group.name}</h2>
+                  <p className="text-sm text-muted shrink-0">
+                    {formatNOK(total)}
+                    <span className="text-xs"> · {group.expenses.length}</span>
+                  </p>
+                </div>
+                <ExpenseList expenses={group.expenses} showCategory={false} />
+              </section>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }
