@@ -1,13 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
-import { Upload, ChevronDown, ChevronUp } from 'lucide-react'
+import { ChevronDown, ChevronUp } from 'lucide-react'
 import { Sheet } from '@/components/ui/Sheet'
 import { Input } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
-import { Textarea } from '@/components/ui/Textarea'
 import { Button } from '@/components/ui/Button'
-import { useExpenseSheet } from '@/hooks/useExpenseSheet'
-import { useExpenses, uploadReceipt } from '@/hooks/useExpenses'
+import { useExpenseSheet, type ExpenseSheetMode } from '@/hooks/useExpenseSheet'
+import { useExpenses } from '@/hooks/useExpenses'
 import { useRooms } from '@/hooks/useRooms'
 import { useCategories } from '@/hooks/useCategories'
 import { useProject } from '@/hooks/useProject'
@@ -18,19 +17,16 @@ import {
   calculateDiscount,
   defaultExpenseForm,
   expenseToForm,
+  getExpenseTotal,
 } from '@/lib/calc'
 import { formatNOK } from '@/lib/format'
-import {
-  EXPENSE_STATUS_LABELS,
-  DEFAULT_UNITS,
-  type Expense,
-  type ExpenseFormData,
-  type ExpenseStatus,
-} from '@/lib/types'
+import type { Expense, ExpenseFormData, ExpenseStatus } from '@/lib/types'
 import type { LocalExpense } from '@/lib/localStore'
 
 const PREFS_KEY = 'renover-expense-prefs'
 const AUTOSAVE_MS = 400
+
+type FormLayout = 'plan' | 'buy' | 'convert'
 
 function loadPrefs(): Partial<ExpenseFormData> {
   try {
@@ -59,8 +55,7 @@ function isMeaningful(form: ExpenseFormData) {
     form.description.trim().length > 0 ||
     form.unit_price > 0 ||
     (form.total_override != null && form.total_override > 0) ||
-    !!form.supplier.trim() ||
-    !!form.notes.trim()
+    !!form.supplier.trim()
   )
 }
 
@@ -70,6 +65,18 @@ function toExpenseView(local: LocalExpense): Expense {
     project_id: '',
     unit: local.unit,
   }
+}
+
+function resolveLayout(
+  mode: ExpenseSheetMode,
+  defaultStatus: 'planned' | 'purchased',
+  editing: Expense | null,
+): FormLayout {
+  if (mode === 'purchase') return 'convert'
+  if (mode === 'edit' && editing) {
+    return editing.status === 'purchased' || editing.status === 'paid' ? 'buy' : 'plan'
+  }
+  return defaultStatus === 'purchased' ? 'buy' : 'plan'
 }
 
 export function ExpenseSheet() {
@@ -86,13 +93,8 @@ export function ExpenseSheet() {
   const { createExpense, updateExpense, softDeleteExpense } = useExpenses()
   const { data: rooms } = useRooms()
   const { data: categories } = useCategories()
-  const { project, members } = useProject()
-  const { user, memberId } = useAuth()
-
-  const statusOptions = Object.entries(EXPENSE_STATUS_LABELS).map(([value, label]) => ({
-    value,
-    label,
-  }))
+  const { members } = useProject()
+  const { memberId } = useAuth()
 
   const roomOptions = (rooms ?? []).map((r) => ({ value: r.id, label: r.name }))
   const categoryOptions = (categories ?? []).map((c) => ({ value: c.id, label: c.name }))
@@ -102,16 +104,30 @@ export function ExpenseSheet() {
   }))
 
   const prefs = loadPrefs()
-  const isPurchase = mode === 'purchase' || defaultStatus === 'purchased'
+  const layout = resolveLayout(mode, defaultStatus, editingExpense)
+  const isBuyLike = layout === 'buy' || layout === 'convert'
 
   let initialForm: ExpenseFormData
   if (editingExpense) {
     initialForm = expenseToForm(editingExpense)
-    if (mode === 'purchase') {
+    if (layout === 'convert') {
       initialForm = {
         ...initialForm,
         status: 'purchased',
         who_paid: memberId ?? initialForm.who_paid,
+        quantity: 1,
+        unit: 'stk',
+        // Keep estimate as starting amount (unit_price already set)
+      }
+    } else if (layout === 'plan') {
+      initialForm = { ...initialForm, status: 'planned', quantity: 1, unit: 'stk' }
+    } else {
+      initialForm = {
+        ...initialForm,
+        status: initialForm.status === 'paid' ? 'paid' : 'purchased',
+        who_paid: initialForm.who_paid || memberId || '',
+        quantity: 1,
+        unit: 'stk',
       }
     }
   } else {
@@ -121,43 +137,53 @@ export function ExpenseSheet() {
       room_id: defaultRoomId ?? prefs.room_id ?? null,
       description: '',
       quantity: 1,
+      unit: 'stk',
       unit_price: 0,
       total_override: null,
       discount_percent: null,
       discount_amount: null,
       notes: '',
+      supplier: isBuyLike ? (prefs.supplier ?? '') : '',
       expense_date: new Date().toISOString().split('T')[0],
-      status: defaultStatus,
-      who_paid: isPurchase ? (memberId ?? prefs.who_paid ?? '') : (prefs.who_paid ?? ''),
+      status: isBuyLike ? 'purchased' : 'planned',
+      who_paid: isBuyLike ? (memberId ?? prefs.who_paid ?? '') : '',
     }
   }
 
   const flushCloseRef = useRef<() => void>(() => close())
 
   const title =
-    mode === 'purchase'
+    layout === 'convert'
       ? 'Registrer kjøp'
-      : editingExpense
-        ? 'Rediger utgift'
-        : defaultStatus === 'purchased'
-          ? 'Nytt kjøp'
-          : 'Ny planlagt'
+      : layout === 'buy'
+        ? editingExpense
+          ? 'Rediger kjøp'
+          : 'Nytt kjøp'
+        : editingExpense
+          ? 'Rediger plan'
+          : 'Planlegg'
+
+  const plannedSummary =
+    layout === 'convert' && editingExpense
+      ? {
+          description: editingExpense.description,
+          estimate: getExpenseTotal(editingExpense),
+        }
+      : null
 
   return (
     <Sheet open={isOpen} onClose={() => flushCloseRef.current()} title={title}>
       {isOpen && (
         <ExpenseForm
-          key={`${editingExpense?.id ?? 'new'}-${mode}-${defaultStatus}-${focusField}`}
+          key={`${editingExpense?.id ?? 'new'}-${layout}-${focusField}`}
           initial={initialForm}
           expenseId={editingExpense?.id ?? null}
+          layout={layout}
           focusField={focusField}
-          isPurchaseLayout={isPurchase}
+          plannedSummary={plannedSummary}
           roomOptions={roomOptions}
           categoryOptions={categoryOptions}
           memberOptions={memberOptions}
-          statusOptions={statusOptions}
-          projectId={project?.id}
-          userId={user?.id}
           onCreated={(expense) => setEditingExpense(toExpenseView(expense))}
           onClose={close}
           registerCloseHandler={(fn) => {
@@ -166,7 +192,6 @@ export function ExpenseSheet() {
           createExpense={(form) => createExpense.mutateAsync(form)}
           updateExpense={(args) => updateExpense.mutateAsync(args)}
           softDeleteExpense={(args) => softDeleteExpense.mutateAsync(args)}
-          uploadReceipt={uploadReceipt}
         />
       )}
     </Sheet>
@@ -176,32 +201,27 @@ export function ExpenseSheet() {
 function ExpenseForm({
   initial,
   expenseId,
+  layout,
   focusField,
-  isPurchaseLayout,
+  plannedSummary,
   roomOptions,
   categoryOptions,
   memberOptions,
-  statusOptions,
-  projectId,
-  userId,
   onCreated,
   onClose,
   registerCloseHandler,
   createExpense,
   updateExpense,
   softDeleteExpense,
-  uploadReceipt,
 }: {
   initial: ExpenseFormData
   expenseId: string | null
+  layout: FormLayout
   focusField: 'description' | 'unit_price'
-  isPurchaseLayout: boolean
+  plannedSummary: { description: string; estimate: number } | null
   roomOptions: { value: string; label: string }[]
   categoryOptions: { value: string; label: string }[]
   memberOptions: { value: string; label: string }[]
-  statusOptions: { value: string; label: string }[]
-  projectId?: string
-  userId?: string
   onCreated: (expense: LocalExpense) => void
   onClose: () => void
   registerCloseHandler: (fn: () => void) => void
@@ -212,21 +232,19 @@ function ExpenseForm({
     quiet?: boolean
   }) => Promise<unknown>
   softDeleteExpense: (id: string | { id: string; quiet?: boolean }) => Promise<unknown>
-  uploadReceipt: (
-    expenseId: string,
-    file: File,
-    projectId: string,
-    userId?: string,
-  ) => Promise<unknown>
 }) {
-  const [form, setForm] = useState<ExpenseFormData>(initial)
+  const lockedStatus: ExpenseStatus = layout === 'plan' ? 'planned' : 'purchased'
+  const [form, setForm] = useState<ExpenseFormData>({
+    ...initial,
+    status: lockedStatus,
+    quantity: 1,
+    unit: 'stk',
+  })
   const [savedId, setSavedId] = useState<string | null>(expenseId)
-  const [showAdvanced, setShowAdvanced] = useState(isPurchaseLayout)
   const [showDiscount, setShowDiscount] = useState(
-    isPurchaseLayout || !!(initial.discount_percent || initial.discount_amount),
+    layout !== 'plan' || !!(initial.discount_percent || initial.discount_amount),
   )
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle')
-  const [receiptFile, setReceiptFile] = useState<File | null>(null)
   const descRef = useRef<HTMLInputElement>(null)
   const priceRef = useRef<HTMLInputElement>(null)
   const formRef = useRef(form)
@@ -246,22 +264,28 @@ function ExpenseForm({
   }, [focusField])
 
   const persist = async (nextForm: ExpenseFormData, id: string | null) => {
-    if (!isMeaningful(nextForm) && !id) return id
+    const locked = {
+      ...nextForm,
+      status: lockedStatus,
+      quantity: 1,
+      unit: 'stk',
+    }
+    if (!isMeaningful(locked) && !id) return id
     setSaveState('saving')
     try {
       if (!id) {
         if (creatingRef.current) return id
         creatingRef.current = true
-        const created = await createExpense(nextForm)
+        const created = await createExpense(locked)
         creatingRef.current = false
         setSavedId(created.id)
-        onCreated(created as Awaited<ReturnType<typeof createExpense>>)
-        savePrefs(nextForm)
+        onCreated(created)
+        savePrefs(locked)
         setSaveState('saved')
         return created.id
       }
-      await updateExpense({ id, form: nextForm, quiet: true })
-      savePrefs(nextForm)
+      await updateExpense({ id, form: locked, quiet: true })
+      savePrefs(locked)
       setSaveState('saved')
       return id
     } catch (err) {
@@ -281,12 +305,22 @@ function ExpenseForm({
 
   const update = (patch: Partial<ExpenseFormData>) => {
     setForm((f) => {
-      const next = { ...f, ...patch }
+      const next = {
+        ...f,
+        ...patch,
+        status: lockedStatus,
+        quantity: 1,
+        unit: 'stk',
+      }
       formRef.current = next
       scheduleSave(next)
       return next
     })
     setSaveState((s) => (s === 'saved' ? 'idle' : s))
+  }
+
+  const setAmount = (value: number) => {
+    update({ unit_price: value, quantity: 1, unit: 'stk', total_override: null })
   }
 
   const flushAndClose = async () => {
@@ -298,11 +332,7 @@ function ExpenseForm({
     let id = savedIdRef.current
     if (isMeaningful(current)) {
       id = await persist(current, id)
-      if (receiptFile && id && projectId) {
-        await uploadReceipt(id, receiptFile, projectId, userId)
-      }
     } else if (id) {
-      // Empty draft — remove so it doesn't clutter the list
       await softDeleteExpense({ id, quiet: true })
     }
     onClose()
@@ -320,9 +350,9 @@ function ExpenseForm({
     }
   }, [])
 
+  const total = calculateTotal(form)
   const subtotal = calculateSubtotal(form.quantity, form.unit_price)
   const discount = calculateDiscount(subtotal, form.discount_percent, form.discount_amount)
-  const total = calculateTotal(form)
 
   const saveLabel =
     saveState === 'saving' ? 'Lagrer…' : saveState === 'saved' ? 'Lagret' : 'Endringer lagres automatisk'
@@ -337,59 +367,54 @@ function ExpenseForm({
     >
       <p className="text-xs text-muted -mt-1">{saveLabel}</p>
 
+      {layout === 'convert' && plannedSummary && (
+        <div className="rounded-xl border border-border bg-white/70 px-4 py-3">
+          <p className="text-xs text-muted uppercase tracking-wide">Fra plan</p>
+          <p className="font-medium mt-0.5">{plannedSummary.description}</p>
+          {plannedSummary.estimate > 0 && (
+            <p className="text-sm text-muted mt-1">
+              Estimat {formatNOK(plannedSummary.estimate)}
+            </p>
+          )}
+        </div>
+      )}
+
+      {layout !== 'convert' && (
+        <Input
+          ref={descRef}
+          label="Beskrivelse"
+          value={form.description === 'Uten tittel' ? '' : form.description}
+          onChange={(e) => update({ description: e.target.value })}
+          placeholder={layout === 'plan' ? 'F.eks. Parkett eik' : 'Hva kjøpte du?'}
+        />
+      )}
+
       <Input
-        ref={descRef}
-        label="Beskrivelse"
-        value={form.description === 'Uten tittel' ? '' : form.description}
-        onChange={(e) => update({ description: e.target.value })}
-        placeholder="F.eks. Parkett eik"
+        ref={priceRef}
+        label={layout === 'plan' ? 'Estimert beløp (NOK)' : 'Beløp (NOK)'}
+        type="number"
+        min={0}
+        step="any"
+        value={form.unit_price || ''}
+        onChange={(e) => setAmount(parseFloat(e.target.value) || 0)}
+        placeholder={layout === 'plan' ? 'Valgfritt' : '0'}
       />
 
-      <div className="grid grid-cols-3 gap-3">
-        <Input
-          label="Antall"
-          type="number"
-          min={0}
-          step="any"
-          value={form.quantity}
-          onChange={(e) => update({ quantity: parseFloat(e.target.value) || 0 })}
-        />
-        <Select
-          label="Enhet"
-          value={form.unit}
-          onChange={(e) => update({ unit: e.target.value })}
-          options={DEFAULT_UNITS.map((u) => ({ value: u, label: u }))}
-        />
-        <Input
-          ref={priceRef}
-          label="Pris/enhet"
-          type="number"
-          min={0}
-          step="any"
-          value={form.unit_price || ''}
-          onChange={(e) => update({ unit_price: parseFloat(e.target.value) || 0 })}
-        />
-      </div>
-
-      <div className="rounded-xl bg-primary/5 border border-primary/10 p-4">
-        <div className="flex justify-between text-sm">
-          <span className="text-muted">Subtotal</span>
-          <span>{formatNOK(subtotal)}</span>
-        </div>
-        {discount > 0 && (
-          <div className="flex justify-between text-sm mt-1 text-emerald-700">
-            <span>Rabatt</span>
-            <span>−{formatNOK(discount)}</span>
-          </div>
-        )}
-        <div className="flex justify-between font-display text-lg font-semibold mt-2 pt-2 border-t border-primary/10">
-          <span>Total</span>
-          <span className="text-primary">{formatNOK(total)}</span>
-        </div>
-      </div>
-
-      {isPurchaseLayout && (
+      {(layout === 'buy' || layout === 'convert') && (
         <>
+          <div className="rounded-xl bg-primary/5 border border-primary/10 p-4">
+            {discount > 0 && (
+              <div className="flex justify-between text-sm mb-1 text-emerald-700">
+                <span>Rabatt</span>
+                <span>−{formatNOK(discount)}</span>
+              </div>
+            )}
+            <div className="flex justify-between font-display text-lg font-semibold">
+              <span>Totalt</span>
+              <span className="text-primary">{formatNOK(total)}</span>
+            </div>
+          </div>
+
           <Select
             label="Betalt av"
             value={form.who_paid}
@@ -397,21 +422,65 @@ function ExpenseForm({
             options={memberOptions}
             placeholder="Velg person"
           />
+
           <Input
             label="Leverandør"
             value={form.supplier}
             onChange={(e) => update({ supplier: e.target.value })}
             placeholder="F.eks. Byggmakker"
           />
+
+          <button
+            type="button"
+            onClick={() => setShowDiscount(!showDiscount)}
+            className="flex items-center gap-2 text-sm text-primary font-medium"
+          >
+            {showDiscount ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+            Rabatt
+          </button>
+
+          {showDiscount && (
+            <div className="grid grid-cols-2 gap-3 pl-2 border-l-2 border-primary/20">
+              <Input
+                label="Rabatt %"
+                type="number"
+                min={0}
+                max={100}
+                value={form.discount_percent ?? ''}
+                onChange={(e) =>
+                  update({
+                    discount_percent: e.target.value ? parseFloat(e.target.value) : null,
+                    discount_amount: null,
+                  })
+                }
+              />
+              <Input
+                label="Rabatt kr"
+                type="number"
+                min={0}
+                value={form.discount_amount ?? ''}
+                onChange={(e) =>
+                  update({
+                    discount_amount: e.target.value ? parseFloat(e.target.value) : null,
+                    discount_percent: null,
+                  })
+                }
+              />
+            </div>
+          )}
+
+          <Input
+            label="Dato"
+            type="date"
+            value={form.expense_date}
+            onChange={(e) => update({ expense_date: e.target.value })}
+          />
         </>
       )}
 
-      <Select
-        label="Status"
-        value={form.status}
-        onChange={(e) => update({ status: e.target.value as ExpenseStatus })}
-        options={statusOptions}
-      />
+      {layout === 'plan' && form.unit_price > 0 && (
+        <p className="text-sm text-muted">Estimat: {formatNOK(total)}</p>
+      )}
 
       <Select
         label="Rom"
@@ -430,115 +499,6 @@ function ExpenseForm({
       />
 
       <InlineNewCategory onCreated={(id) => update({ category_id: id })} />
-
-      <button
-        type="button"
-        onClick={() => setShowDiscount(!showDiscount)}
-        className="flex items-center gap-2 text-sm text-primary font-medium"
-      >
-        {showDiscount ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-        Rabatt
-      </button>
-
-      {showDiscount && (
-        <div className="grid grid-cols-2 gap-3 pl-2 border-l-2 border-primary/20">
-          <Input
-            label="Rabatt %"
-            type="number"
-            min={0}
-            max={100}
-            value={form.discount_percent ?? ''}
-            onChange={(e) =>
-              update({
-                discount_percent: e.target.value ? parseFloat(e.target.value) : null,
-                discount_amount: null,
-              })
-            }
-          />
-          <Input
-            label="Rabatt kr"
-            type="number"
-            min={0}
-            value={form.discount_amount ?? ''}
-            onChange={(e) =>
-              update({
-                discount_amount: e.target.value ? parseFloat(e.target.value) : null,
-                discount_percent: null,
-              })
-            }
-          />
-        </div>
-      )}
-
-      <button
-        type="button"
-        onClick={() => setShowAdvanced(!showAdvanced)}
-        className="flex items-center gap-2 text-sm text-primary font-medium"
-      >
-        {showAdvanced ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-        Flere detaljer
-      </button>
-
-      {showAdvanced && (
-        <div className="space-y-4 pl-2 border-l-2 border-primary/20">
-          {!isPurchaseLayout && (
-            <Input
-              label="Leverandør"
-              value={form.supplier}
-              onChange={(e) => update({ supplier: e.target.value })}
-              placeholder="F.eks. Byggmakker"
-            />
-          )}
-          <Input
-            label="Dato"
-            type="date"
-            value={form.expense_date}
-            onChange={(e) => update({ expense_date: e.target.value })}
-          />
-          {!isPurchaseLayout && (
-            <Select
-              label="Betalt av"
-              value={form.who_paid}
-              onChange={(e) => update({ who_paid: e.target.value })}
-              options={memberOptions}
-              placeholder="Velg person"
-            />
-          )}
-          <Input
-            label="Overstyr total"
-            type="number"
-            min={0}
-            value={form.total_override ?? ''}
-            onChange={(e) =>
-              update({ total_override: e.target.value ? parseFloat(e.target.value) : null })
-            }
-            placeholder="Valgfritt"
-          />
-          <Textarea
-            label="Notater"
-            value={form.notes}
-            onChange={(e) => update({ notes: e.target.value })}
-            placeholder="Ekstra info..."
-          />
-          <div>
-            <label className="block text-sm font-medium text-muted-foreground mb-1.5">
-              Kvittering
-            </label>
-            <label className="flex items-center gap-3 h-11 px-4 rounded-xl border border-dashed border-border bg-white/50 cursor-pointer hover:bg-white/80 transition-colors">
-              <Upload className="h-4 w-4 text-muted" />
-              <span className="text-sm text-muted truncate">
-                {receiptFile ? receiptFile.name : 'Last opp kvittering'}
-              </span>
-              <input
-                type="file"
-                accept="image/*,.pdf"
-                className="hidden"
-                onChange={(e) => setReceiptFile(e.target.files?.[0] ?? null)}
-              />
-            </label>
-          </div>
-        </div>
-      )}
 
       <Button type="submit" size="lg" className="w-full">
         Ferdig

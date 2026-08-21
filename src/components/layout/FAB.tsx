@@ -19,10 +19,10 @@ export function FAB() {
           'shadow-lg flex items-center gap-2 font-medium text-sm',
           'hover:bg-primary/5 active:scale-95 transition-all',
         )}
-        aria-label="Ny planlagt utgift"
+        aria-label="Planlegg utgift"
       >
         <ClipboardList className="h-5 w-5" />
-        Planlagt
+        Planlegg
       </button>
       <button
         type="button"
@@ -32,10 +32,10 @@ export function FAB() {
           'shadow-lg shadow-primary/25 flex items-center gap-2 font-medium',
           'hover:bg-primary-dark active:scale-95 transition-all',
         )}
-        aria-label="Ny kjøpt utgift"
+        aria-label="Registrer kjøp"
       >
         <ShoppingBag className="h-5 w-5" />
-        Kjøpt
+        Kjøp
       </button>
     </div>
   )

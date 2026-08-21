@@ -5,6 +5,7 @@ import { StatusBadge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { useExpenseSheet } from '@/hooks/useExpenseSheet'
 import { useExpenses } from '@/hooks/useExpenses'
+import { useProject } from '@/hooks/useProject'
 import { getExpenseTotal } from '@/lib/calc'
 import { formatNOK, formatDate } from '@/lib/format'
 import type { Expense } from '@/lib/types'
@@ -19,15 +20,20 @@ interface ExpenseRowProps {
 export function ExpenseRow({ expense, showRoom = true, showCategory = true }: ExpenseRowProps) {
   const { openEdit, openPurchase } = useExpenseSheet()
   const { softDeleteExpense, duplicateExpense } = useExpenses()
+  const { members } = useProject()
   const [menuOpen, setMenuOpen] = useState(false)
 
   const total = getExpenseTotal(expense)
   const canPurchase = expense.status === 'planned' || expense.status === 'quoted'
+  const isPurchase = expense.status === 'purchased' || expense.status === 'paid'
+  const paidBy = members.find((m) => m.id === expense.who_paid)
+  const paidByName =
+    paidBy?.profile?.display_name ?? paidBy?.display_name ?? null
 
   return (
     <Card padding="sm" className="relative">
       <div className="flex items-start gap-2">
-        <button onClick={() => openEdit(expense)} className="flex-1 text-left min-w-0">
+        <button type="button" onClick={() => openEdit(expense)} className="flex-1 text-left min-w-0">
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
               <p className="font-medium text-sm truncate">{expense.description}</p>
@@ -38,14 +44,26 @@ export function ExpenseRow({ expense, showRoom = true, showCategory = true }: Ex
                 {showCategory && expense.category && (
                   <span className="text-xs text-muted">· {expense.category.name}</span>
                 )}
-                {expense.supplier && (
+                {isPurchase && expense.supplier && (
                   <span className="text-xs text-muted">· {expense.supplier}</span>
+                )}
+                {isPurchase && paidByName && (
+                  <span className="text-xs text-muted">· {paidByName}</span>
                 )}
               </div>
             </div>
             <div className="text-right shrink-0">
-              <p className="font-display font-semibold text-sm">{formatNOK(total)}</p>
-              {expense.expense_date && (
+              {canPurchase ? (
+                <>
+                  <p className="text-[10px] uppercase tracking-wide text-muted">Estimat</p>
+                  <p className="font-display font-semibold text-sm text-muted">
+                    {total > 0 ? formatNOK(total) : '—'}
+                  </p>
+                </>
+              ) : (
+                <p className="font-display font-semibold text-sm">{formatNOK(total)}</p>
+              )}
+              {expense.expense_date && isPurchase && (
                 <p className="text-xs text-muted">{formatDate(expense.expense_date)}</p>
               )}
             </div>
@@ -68,7 +86,7 @@ export function ExpenseRow({ expense, showRoom = true, showCategory = true }: Ex
               }}
             >
               <ShoppingBag className="h-3.5 w-3.5" />
-              Kjøpt
+              Kjøp
             </Button>
           )}
           <div className="relative">
