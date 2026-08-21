@@ -45,7 +45,10 @@ export type ExpenseStatus = 'planned' | 'quoted' | 'ordered' | 'purchased' | 'pa
 export interface LocalMember {
   id: string
   display_name: string
-  device_key: string
+  /** @deprecated use device_keys — kept for older backups */
+  device_key?: string
+  /** All devices that have claimed this person */
+  device_keys: string[]
 }
 
 export interface LocalRoom {
@@ -132,6 +135,47 @@ export function generateInviteCode() {
   return code
 }
 
+export function normalizeName(name: string) {
+  return name.trim().toLowerCase().replace(/\s+/g, ' ')
+}
+
+/** Normalize older backups that only had device_key */
+export function normalizeMember(m: LocalMember): LocalMember {
+  const keys = Array.from(
+    new Set(
+      [...(m.device_keys ?? []), m.device_key].filter((k): k is string => !!k),
+    ),
+  )
+  return {
+    id: m.id,
+    display_name: m.display_name,
+    device_keys: keys,
+    device_key: keys[0],
+  }
+}
+
+export function normalizeProject(project: LocalProject): LocalProject {
+  return {
+    ...project,
+    members: project.members.map(normalizeMember),
+  }
+}
+
+const DEVICE_KEY_LS = 'renover-device-key'
+
+/** Stable per-browser device id (survives sign-out) */
+export function getOrCreateDeviceKey() {
+  try {
+    const existing = localStorage.getItem(DEVICE_KEY_LS)
+    if (existing) return existing
+    const next = uid()
+    localStorage.setItem(DEVICE_KEY_LS, next)
+    return next
+  } catch {
+    return uid()
+  }
+}
+
 export async function loadSession(): Promise<LocalSession | null> {
   return idbGet<LocalSession>(SESSION_KEY)
 }
@@ -150,7 +194,8 @@ export async function saveSession(session: LocalSession | null) {
 }
 
 export async function loadProject(projectId: string): Promise<LocalProject | null> {
-  return idbGet<LocalProject>(PROJECT_PREFIX + projectId)
+  const p = await idbGet<LocalProject>(PROJECT_PREFIX + projectId)
+  return p ? normalizeProject(p) : null
 }
 
 export async function loadProjectByInvite(code: string): Promise<LocalProject | null> {
@@ -167,7 +212,7 @@ export async function loadProjectByInvite(code: string): Promise<LocalProject | 
       if (typeof cursor.key === 'string' && cursor.key.startsWith(PROJECT_PREFIX)) {
         const p = cursor.value as LocalProject
         if (p.invite_code === code.toUpperCase()) {
-          resolve(p)
+          resolve(normalizeProject(p))
           return
         }
       }
@@ -178,10 +223,11 @@ export async function loadProjectByInvite(code: string): Promise<LocalProject | 
 }
 
 export async function saveProject(project: LocalProject) {
-  project.updated_at = new Date().toISOString()
-  await idbSet(PROJECT_PREFIX + project.id, project)
-  // Also mirror under invite key for join-from-sync
-  await idbSet(`renover-invite:${project.invite_code}`, project.id)
+  const normalized = normalizeProject(project)
+  normalized.updated_at = new Date().toISOString()
+  await idbSet(PROJECT_PREFIX + normalized.id, normalized)
+  await idbSet(`renover-invite:${normalized.invite_code}`, normalized.id)
+  return normalized
 }
 
 export function emptyProject(name: string, budget: number, invite: string): LocalProject {

@@ -4,14 +4,15 @@ import {
   emptyProject,
   generateInviteCode,
   loadProject,
-  loadProjectByInvite,
+  normalizeName,
+  normalizeMember,
   saveProject,
   subscribeProject,
   uid,
   type LocalProject,
   type LocalMember,
 } from '@/lib/localStore'
-import { startProjectSync, publishProject } from '@/lib/sync'
+import { startProjectSync, publishProject, fetchProjectByInvite } from '@/lib/sync'
 
 export interface ProjectMemberView {
   id: string
@@ -37,7 +38,16 @@ interface ProjectContextValue {
   loading: boolean
   hasProject: boolean
   createProject: (name: string, budget: number, displayName: string) => Promise<{ error: string | null }>
+  /** Look up a project by invite (for join UI) without creating a session yet */
+  lookupProject: (inviteCode: string) => Promise<{ project: LocalProject | null; error: string | null }>
+  /** Continue as an existing member, or add a new person if memberId is null */
+  joinAs: (
+    inviteCode: string,
+    opts: { memberId?: string; displayName: string },
+  ) => Promise<{ error: string | null }>
+  /** @deprecated use joinAs — kept for compatibility */
   joinProject: (inviteCode: string, displayName: string) => Promise<{ error: string | null }>
+  addMember: (displayName: string) => Promise<{ error: string | null; member?: LocalMember }>
   updateProject: (updates: Partial<Pick<RenovationProjectView, 'name' | 'total_budget'>>) => Promise<{ error: string | null }>
   refreshProject: () => void
   setRawProject: (p: LocalProject) => Promise<void>
@@ -64,6 +74,15 @@ function toMembers(p: LocalProject): ProjectMemberView[] {
     joined_at: p.created_at,
     profile: { id: m.id, display_name: m.display_name },
   }))
+}
+
+function attachDevice(member: LocalMember, deviceKey: string): LocalMember {
+  const normalized = normalizeMember(member)
+  if (!normalized.device_keys.includes(deviceKey)) {
+    normalized.device_keys = [...normalized.device_keys, deviceKey]
+  }
+  normalized.device_key = normalized.device_keys[0]
+  return normalized
 }
 
 export function ProjectProvider({ children }: { children: ReactNode }) {
@@ -102,9 +121,9 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   }, [session?.inviteCode, session?.projectId])
 
   const setRawProject = async (p: LocalProject) => {
-    await saveProject(p)
-    setRaw(p)
-    publishProject(p)
+    const saved = await saveProject(p)
+    setRaw(saved)
+    publishProject(saved)
   }
 
   const createProject = async (name: string, budget: number, displayName: string) => {
@@ -115,6 +134,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       const member: LocalMember = {
         id: memberId,
         display_name: displayName.trim(),
+        device_keys: [deviceKey],
         device_key: deviceKey,
       }
       const project = emptyProject(name.trim() || 'Vår renovering', budget || 0, invite)
@@ -136,19 +156,19 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
           created_at: new Date().toISOString(),
         },
       ]
-      await saveProject(project)
+      const saved = await saveProject(project)
       await setSession({
         deviceKey,
         displayName: member.display_name,
         memberId,
-        projectId: project.id,
+        projectId: saved.id,
         inviteCode: invite,
       })
-      setRaw(project)
+      setRaw(saved)
       try {
-        publishProject(project)
+        publishProject(saved)
       } catch {
-        // Sync is best-effort; local create must still succeed
+        // Sync is best-effort
       }
       return { error: null }
     } catch (e) {
@@ -156,71 +176,147 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  const joinProject = async (inviteCode: string, displayName: string) => {
+  const lookupProject = async (inviteCode: string) => {
+    try {
+      const code = inviteCode.trim().toUpperCase()
+      if (code.length < 4) return { project: null, error: 'Skriv inn invitasjonskoden' }
+      const project = await fetchProjectByInvite(code)
+      if (!project) {
+        return {
+          project: null,
+          error:
+            'Fant ikke prosjektet. Be den andre å ha appen åpen, eller importer en sikkerhetskopi under Innstillinger.',
+        }
+      }
+      return { project, error: null }
+    } catch (e) {
+      return { project: null, error: e instanceof Error ? e.message : 'Kunne ikke hente prosjekt' }
+    }
+  }
+
+  const joinAs = async (
+    inviteCode: string,
+    opts: { memberId?: string; displayName: string },
+  ) => {
     try {
       const code = inviteCode.trim().toUpperCase()
       const deviceKey = session?.deviceKey ?? createDeviceKey()
+      const displayName = opts.displayName.trim()
+      if (!displayName) return { error: 'Skriv inn navnet ditt' }
 
-      // Prefer live sync snapshot from broadcast buffer / local
-      let project = await loadProjectByInvite(code)
-      if (!project) {
-        // Wait briefly for sync packet if partner is online
-        project = await new Promise<LocalProject | null>((resolve) => {
-          const stop = startProjectSync(code, 'pending', (p) => {
-            if (p.invite_code === code) {
-              stop()
-              resolve(p)
-            }
-          })
-          setTimeout(() => {
-            stop()
-            resolve(null)
-          }, 2500)
-        })
-      }
-
+      let project = await fetchProjectByInvite(code)
       if (!project) {
         return {
           error:
-            'Fant ikke prosjektet. Be partneren åpne appen (så synken er aktiv), eller importer en sikkerhetskopi.',
+            'Fant ikke prosjektet. Be den andre å ha appen åpen, eller importer en sikkerhetskopi.',
         }
       }
 
-      const existing = project.members.find((m) => m.device_key === deviceKey)
-      let memberId = existing?.id
-      if (!existing) {
+      project = {
+        ...project,
+        members: project.members.map(normalizeMember),
+      }
+
+      let member: LocalMember | undefined
+
+      if (opts.memberId) {
+        member = project.members.find((m) => m.id === opts.memberId)
+        if (!member) return { error: 'Personen finnes ikke i prosjektet' }
+      } else {
+        // Same name = same person (continue as yourself on a new device)
+        member = project.members.find(
+          (m) => normalizeName(m.display_name) === normalizeName(displayName),
+        )
+      }
+
+      if (member) {
+        member = attachDevice(member, deviceKey)
+        member.display_name = displayName || member.display_name
+        project.members = project.members.map((m) => (m.id === member!.id ? member! : m))
+      } else {
         if (project.members.length >= 2) {
-          return { error: 'Prosjektet har allerede maks 2 medlemmer' }
+          return {
+            error:
+              'Prosjektet har allerede 2 personer. Velg din egen fra listen for å åpne på denne enheten.',
+          }
         }
-        memberId = uid()
-        project.members.push({
-          id: memberId,
-          display_name: displayName.trim(),
-          device_key: deviceKey,
-        })
-        project.activity.unshift({
+        member = {
           id: uid(),
-          actor_id: memberId,
-          actor_name: displayName.trim(),
-          event_type: 'member_joined',
-          summary: `${displayName.trim()} ble med i prosjektet`,
-          created_at: new Date().toISOString(),
-        })
-        await saveProject(project)
-        publishProject(project)
+          display_name: displayName,
+          device_keys: [deviceKey],
+          device_key: deviceKey,
+        }
+        project.members = [...project.members, member]
+        project.activity = [
+          {
+            id: uid(),
+            actor_id: member.id,
+            actor_name: displayName,
+            event_type: 'member_joined',
+            summary: `${displayName} ble med i prosjektet`,
+            created_at: new Date().toISOString(),
+          },
+          ...project.activity,
+        ]
       }
 
+      const saved = await saveProject(project)
+      publishProject(saved)
       await setSession({
         deviceKey,
-        displayName: displayName.trim(),
-        memberId: memberId!,
-        projectId: project.id,
+        displayName: member.display_name,
+        memberId: member.id,
+        projectId: saved.id,
         inviteCode: code,
       })
-      setRaw(project)
+      setRaw(saved)
       return { error: null }
     } catch (e) {
       return { error: e instanceof Error ? e.message : 'Kunne ikke bli med' }
+    }
+  }
+
+  const joinProject = async (inviteCode: string, displayName: string) => {
+    return joinAs(inviteCode, { displayName })
+  }
+
+  const addMember = async (displayName: string) => {
+    try {
+      if (!rawProject) return { error: 'Ingen prosjekt' }
+      const name = displayName.trim()
+      if (!name) return { error: 'Skriv inn navn' }
+      if (rawProject.members.length >= 2) {
+        return { error: 'Prosjektet har allerede maks 2 personer' }
+      }
+      if (
+        rawProject.members.some((m) => normalizeName(m.display_name) === normalizeName(name))
+      ) {
+        return { error: 'Personen finnes allerede' }
+      }
+      const member: LocalMember = {
+        id: uid(),
+        display_name: name,
+        device_keys: [],
+      }
+      const next: LocalProject = {
+        ...rawProject,
+        members: [...rawProject.members.map(normalizeMember), member],
+        activity: [
+          {
+            id: uid(),
+            actor_id: session?.memberId ?? null,
+            actor_name: session?.displayName ?? 'Noen',
+            event_type: 'member_added',
+            summary: `${name} ble lagt til i prosjektet`,
+            created_at: new Date().toISOString(),
+          },
+          ...rawProject.activity,
+        ],
+      }
+      await setRawProject(next)
+      return { error: null, member }
+    } catch (e) {
+      return { error: e instanceof Error ? e.message : 'Kunne ikke legge til' }
     }
   }
 
@@ -246,7 +342,10 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         loading,
         hasProject: !!rawProject,
         createProject,
+        lookupProject,
+        joinAs,
         joinProject,
+        addMember,
         updateProject: updateProjectFields,
         refreshProject: () => {
           void refreshProject()

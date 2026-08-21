@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from '
 import {
   loadSession,
   saveSession,
-  uid,
+  getOrCreateDeviceKey,
   type LocalSession,
 } from '@/lib/localStore'
 
@@ -22,7 +22,7 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | null>(null)
 
 export function createDeviceKey() {
-  return uid()
+  return getOrCreateDeviceKey()
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -64,7 +64,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         session,
         loading,
         displayName: session?.displayName ?? null,
-        deviceKey: session?.deviceKey ?? null,
+        deviceKey: session?.deviceKey ?? getOrCreateDeviceKey(),
         memberId: session?.memberId ?? null,
         setSession,
         updateDisplayName,

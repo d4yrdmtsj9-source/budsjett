@@ -23,8 +23,8 @@ const CATEGORY_SUGGESTIONS = [
 ]
 
 export function SettingsPage() {
-  const { profile, signOut, updateDisplayName } = useAuth()
-  const { project, members, updateProject, rawProject, setRawProject } = useProject()
+  const { profile, signOut, updateDisplayName, memberId } = useAuth()
+  const { project, members, updateProject, rawProject, setRawProject, addMember } = useProject()
   const { data: categories, createCategory } = useCategories()
   const [name, setName] = useState(profile?.display_name ?? '')
   const [projectName, setProjectName] = useState(project?.name ?? '')
@@ -34,12 +34,26 @@ export function SettingsPage() {
   const [showAddCategory, setShowAddCategory] = useState(false)
   const [categoryName, setCategoryName] = useState('')
   const [categoryBudget, setCategoryBudget] = useState('')
+  const [showAddMember, setShowAddMember] = useState(false)
+  const [newMemberName, setNewMemberName] = useState('')
 
   const handleSaveName = async () => {
     setSaving(true)
     const { error } = await updateDisplayName(name)
-    if (error) toast.error(error)
-    else toast.success('Navn oppdatert')
+    if (error) {
+      toast.error(error)
+      setSaving(false)
+      return
+    }
+    if (rawProject && memberId) {
+      await setRawProject({
+        ...rawProject,
+        members: rawProject.members.map((m) =>
+          m.id === memberId ? { ...m, display_name: name.trim() } : m,
+        ),
+      })
+    }
+    toast.success('Navn oppdatert')
     setSaving(false)
   }
 
@@ -141,7 +155,8 @@ export function SettingsPage() {
               </Button>
             </div>
             <p className="text-xs text-muted mt-2">
-              Begge må ha appen åpen samtidig første gang dere synker. Del også gjerne en sikkerhetskopi under.
+              Partner / ny PC: «Åpne / bli med» → skriv koden → velg «Fortsett som [navn]». Begge bør
+              ha appen åpen første gang. Ellers: eksporter/importer sikkerhetskopi.
             </p>
           </div>
 
@@ -239,7 +254,20 @@ export function SettingsPage() {
       </section>
 
       <section>
-        <SectionLabel icon={Users} label="Medlemmer" />
+        <div className="flex items-center justify-between gap-2 mb-2">
+          <div className="flex items-center gap-2">
+            <Users className="h-4 w-4 text-primary" />
+            <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+              Personer
+            </h2>
+          </div>
+          {members.length < 2 && (
+            <Button size="sm" onClick={() => setShowAddMember(true)}>
+              <Plus className="h-4 w-4" />
+              Legg til
+            </Button>
+          )}
+        </div>
         <Card>
           <div className="space-y-3">
             {members.map((member) => (
@@ -252,13 +280,21 @@ export function SettingsPage() {
                 <div>
                   <p className="font-medium text-sm">
                     {member.profile?.display_name ?? 'Ukjent'}
+                    {member.id === memberId ? (
+                      <span className="text-xs text-muted font-normal"> (deg)</span>
+                    ) : null}
                   </p>
                   <p className="text-xs text-muted">
-                    Medlem siden {new Date(member.joined_at).toLocaleDateString('nb-NO')}
+                    Kan åpne prosjektet på flere enheter med invitasjonskoden
                   </p>
                 </div>
               </div>
             ))}
+            {members.length < 2 && (
+              <p className="text-xs text-muted pt-1">
+                Legg til partnerens navn her, eller be dem bruke «Åpne / bli med» med koden.
+              </p>
+            )}
           </div>
         </Card>
       </section>
@@ -305,6 +341,44 @@ export function SettingsPage() {
           />
           <Button type="submit" size="lg" className="w-full" disabled={saving}>
             {saving ? 'Lagrer...' : 'Legg til kategori'}
+          </Button>
+        </form>
+      </Sheet>
+
+      <Sheet
+        open={showAddMember}
+        onClose={() => setShowAddMember(false)}
+        title="Legg til person"
+      >
+        <form
+          onSubmit={async (e) => {
+            e.preventDefault()
+            setSaving(true)
+            const { error } = await addMember(newMemberName)
+            if (error) toast.error(error)
+            else {
+              toast.success('Person lagt til')
+              setShowAddMember(false)
+              setNewMemberName('')
+            }
+            setSaving(false)
+          }}
+          className="space-y-4 pb-6"
+        >
+          <Input
+            label="Navn"
+            value={newMemberName}
+            onChange={(e) => setNewMemberName(e.target.value)}
+            placeholder="Partnerens navn"
+            required
+            autoFocus
+          />
+          <p className="text-xs text-muted">
+            De åpner appen på sin enhet, velger «Åpne / bli med», skriver invitasjonskoden og
+            trykker «Fortsett som [navn]».
+          </p>
+          <Button type="submit" size="lg" className="w-full" disabled={saving}>
+            {saving ? 'Lagrer...' : 'Legg til person'}
           </Button>
         </form>
       </Sheet>
