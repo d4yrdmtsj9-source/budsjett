@@ -1,45 +1,49 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import {
-  TrendingDown,
-  Wallet,
-  PiggyBank,
-  ArrowRight,
-  Plus,
-  Home,
-} from 'lucide-react'
+import { PiggyBank, ArrowRight, Plus, Home } from 'lucide-react'
 import { Card, CardHeader, CardTitle } from '@/components/ui/Card'
-import { ProgressBar } from '@/components/ui/ProgressBar'
 import { LoadingSpinner, EmptyState } from '@/components/ui/LoadingSpinner'
 import { ExpenseList } from '@/components/expense/ExpenseRow'
 import { AddRoomSheet } from '@/components/room/AddRoomSheet'
+import { BudgetQuad } from '@/components/budget/BudgetQuad'
 import { useProject } from '@/hooks/useProject'
 import { useExpenses } from '@/hooks/useExpenses'
 import { useRooms } from '@/hooks/useRooms'
 import { useExpenseSheet } from '@/hooks/useExpenseSheet'
+import { useCloudSync } from '@/hooks/useCloudSync'
+import { useAuth } from '@/hooks/useAuth'
 import {
   getExpenseTotal,
   sumPaidExpenses,
   sumPlannedExpenses,
   sumProjectedExpenses,
-  remainingBudget,
+  overPlanSentence,
 } from '@/lib/calc'
 import { formatNOK } from '@/lib/format'
 
 export function DashboardPage() {
   const { project, members } = useProject()
+  const { memberId } = useAuth()
+  const sync = useCloudSync()
   const { expenses, isLoading } = useExpenses()
   const { data: rooms } = useRooms()
   const { openNew } = useExpenseSheet()
   const [showAddRoom, setShowAddRoom] = useState(false)
+
+  const me = members.find((m) => m.id === memberId)
+  const partner = members.find((m) => m.id !== memberId)
 
   const stats = useMemo(() => {
     const totalBudget = project?.total_budget ?? 0
     const projected = sumProjectedExpenses(expenses)
     const bought = sumPaidExpenses(expenses)
     const planned = sumPlannedExpenses(expenses)
-    const remaining = remainingBudget(totalBudget, projected)
     const underBudget = totalBudget - projected
+    const warning = overPlanSentence({
+      name: project?.name || 'Prosjektet',
+      budget: totalBudget,
+      projected,
+    })
     const discountSavings = expenses.reduce((sum, e) => {
       const subtotal = e.quantity * e.unit_price
       if (e.discount_amount && e.discount_amount > 0) return sum + e.discount_amount
@@ -47,7 +51,7 @@ export function DashboardPage() {
       return sum
     }, 0)
 
-    return { totalBudget, projected, bought, planned, remaining, underBudget, discountSavings }
+    return { totalBudget, projected, bought, planned, underBudget, warning, discountSavings }
   }, [project, expenses])
 
   const byRoom = useMemo(() => {
@@ -103,45 +107,39 @@ export function DashboardPage() {
   return (
     <div className="space-y-6 pb-4">
       <header>
-        <p className="text-sm text-muted">Velkommen tilbake</p>
+        <p className="text-sm text-muted">
+          {me?.profile?.display_name ?? me?.display_name ?? 'Deg'}
+          {partner ? ` · ${partner.profile?.display_name ?? partner.display_name}` : ''}
+        </p>
         <h1 className="font-display text-2xl font-bold">{project?.name}</h1>
+        <p className="text-xs text-muted mt-1">{sync.label}</p>
       </header>
 
-      <Card padding="lg" className="bg-gradient-to-br from-primary/10 to-primary/5 border-primary/10">
-        <div className="grid grid-cols-2 gap-4">
-          <StatItem icon={Wallet} label="Budsjett" value={formatNOK(stats.totalBudget)} />
-          <StatItem icon={TrendingDown} label="Kjøpt" value={formatNOK(stats.bought)} />
-          <StatItem label="Planlagt" value={formatNOK(stats.planned)} />
-          <StatItem
-            label="Gjenstår"
-            value={formatNOK(stats.remaining)}
-            highlight={stats.remaining < 0}
-          />
-        </div>
-        {stats.totalBudget > 0 ? (
-          <div className="mt-4">
-            <ProgressBar value={stats.projected} max={stats.totalBudget} showLabel />
-          </div>
-        ) : stats.projected > 0 ? (
-          <p className="text-xs text-muted mt-3">Sett totalbudsjett under Innstillinger</p>
-        ) : null}
-        {stats.underBudget > 0 && stats.totalBudget > 0 && (
-          <div className="mt-3 flex items-center gap-2 text-sm text-emerald-700">
-            <PiggyBank className="h-4 w-4" />
-            <span>{formatNOK(stats.underBudget)} under budsjett hvis alt kjøpes</span>
-          </div>
-        )}
-        {stats.underBudget < 0 && (
-          <div className="mt-3 text-sm text-amber-700">
-            {formatNOK(Math.abs(stats.underBudget))} over budsjett hvis alt kjøpes
-          </div>
-        )}
-        {stats.discountSavings > 0 && (
-          <div className="mt-2 text-sm text-muted">
-            Spart {formatNOK(stats.discountSavings)} i rabatter
-          </div>
-        )}
-      </Card>
+      <BudgetQuad
+        budget={stats.totalBudget}
+        bought={stats.bought}
+        planned={stats.planned}
+        footer={
+          <>
+            {stats.totalBudget <= 0 && stats.projected > 0 && (
+              <p className="text-xs text-muted mt-3">Sett totalbudsjett under Innstillinger</p>
+            )}
+            {stats.warning ? (
+              <p className="mt-3 text-sm text-destructive">{stats.warning}</p>
+            ) : stats.underBudget > 0 && stats.totalBudget > 0 ? (
+              <div className="mt-3 flex items-center gap-2 text-sm text-emerald-700">
+                <PiggyBank className="h-4 w-4" />
+                <span>{formatNOK(stats.underBudget)} under budsjett hvis alt kjøpes</span>
+              </div>
+            ) : null}
+            {stats.discountSavings > 0 && (
+              <p className="mt-2 text-sm text-muted">
+                Spart {formatNOK(stats.discountSavings)} i rabatter
+              </p>
+            )}
+          </>
+        }
+      />
 
       {paidByPerson && (
         <Card padding="sm">
@@ -197,28 +195,36 @@ export function DashboardPage() {
           />
         ) : (
           <div className="flex flex-col gap-3">
-            {byRoom.map(({ room, bought, planned, projected }) => (
-              <Link key={room.id} to={`/rom/${room.id}`} className="block">
-                <Card padding="sm">
-                  <div className="flex justify-between items-center mb-1">
-                    <span className="font-medium text-sm">{room.name}</span>
-                    <span className="text-sm text-muted">
-                      {formatNOK(bought)}
-                      {room.budget > 0 ? ` / ${formatNOK(room.budget)}` : ''}
-                    </span>
-                  </div>
-                  <p className="text-xs text-muted mb-2">
-                    Kjøpt
-                    {planned > 0 ? ` · ${formatNOK(planned)} planlagt` : ''}
-                  </p>
-                  {room.budget > 0 ? (
-                    <ProgressBar value={projected} max={room.budget} size="sm" />
-                  ) : projected > 0 ? (
-                    <p className="text-xs text-muted">Ingen rombudsjett</p>
-                  ) : null}
-                </Card>
-              </Link>
-            ))}
+            {byRoom.map(({ room, bought, planned, projected }) => {
+              const warning = overPlanSentence({
+                name: room.name,
+                budget: room.budget,
+                projected,
+              })
+              return (
+                <Link key={room.id} to={`/rom/${room.id}`} className="block">
+                  <Card padding="sm">
+                    <p className="font-medium text-sm mb-2">{room.name}</p>
+                    <BudgetQuad
+                      budget={room.budget}
+                      bought={bought}
+                      planned={planned}
+                      compact
+                      framed={false}
+                    />
+                    {warning ? (
+                      <p className="mt-2 text-xs text-destructive">{warning}</p>
+                    ) : room.budget > 0 ? (
+                      <p className="mt-2 text-xs text-muted">
+                        {formatNOK(room.budget - projected)} gjenstår hvis dere kjøper alt planlagt
+                      </p>
+                    ) : projected > 0 ? (
+                      <p className="mt-2 text-xs text-muted">Ingen rombudsjett</p>
+                    ) : null}
+                  </Card>
+                </Link>
+              )
+            })}
           </div>
         )}
       </section>
@@ -249,30 +255,6 @@ export function DashboardPage() {
           <ExpenseList expenses={plannedExpenses} />
         </section>
       )}
-    </div>
-  )
-}
-
-function StatItem({
-  icon: Icon,
-  label,
-  value,
-  highlight,
-}: {
-  icon?: React.ComponentType<{ className?: string }>
-  label: string
-  value: string
-  highlight?: boolean
-}) {
-  return (
-    <div>
-      <div className="flex items-center gap-1.5 text-xs text-muted mb-0.5">
-        {Icon && <Icon className="h-3.5 w-3.5" />}
-        {label}
-      </div>
-      <p className={`font-display text-lg font-semibold ${highlight ? 'text-destructive' : ''}`}>
-        {value}
-      </p>
     </div>
   )
 }

@@ -16,6 +16,22 @@ export function formatNOK(amount: number, precise = false): string {
   return precise ? nokFormatterPrecise.format(amount) : nokFormatter.format(amount)
 }
 
+/** Grouped digits for input, e.g. 8400 → "8 400" */
+export function formatGroupedNOK(amount: number): string {
+  if (!amount) return ''
+  const hasDecimals = Math.abs(amount % 1) > 0.0001
+  return new Intl.NumberFormat('nb-NO', {
+    maximumFractionDigits: hasDecimals ? 2 : 0,
+    minimumFractionDigits: 0,
+  }).format(amount)
+}
+
+export function parseNOKInput(raw: string): number {
+  const normalized = raw.replace(/\s/g, '').replace(',', '.')
+  const n = parseFloat(normalized)
+  return Number.isFinite(n) ? n : 0
+}
+
 export function formatPercent(value: number): string {
   return `${Math.round(value)} %`
 }

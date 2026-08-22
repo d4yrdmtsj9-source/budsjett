@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Copy, Check, LogOut, User, Users, Wallet, Tags, Plus } from 'lucide-react'
+import { Copy, Check, LogOut, User, Users, Wallet, Tags, Plus, Smartphone } from 'lucide-react'
 import { toast } from 'sonner'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
@@ -8,6 +8,7 @@ import { Sheet } from '@/components/ui/Sheet'
 import { useAuth } from '@/hooks/useAuth'
 import { useProject } from '@/hooks/useProject'
 import { useCategories } from '@/hooks/useCategories'
+import { useCloudSync } from '@/hooks/useCloudSync'
 
 const CATEGORY_SUGGESTIONS = [
   'Materialer',
@@ -23,7 +24,8 @@ const CATEGORY_SUGGESTIONS = [
 
 export function SettingsPage() {
   const { profile, signOut, updateDisplayName, memberId } = useAuth()
-  const { project, members, updateProject, rawProject, setRawProject, addMember } = useProject()
+  const { project, members, updateProject, rawProject, setRawProject, addMember, switchMember } = useProject()
+  const sync = useCloudSync()
   const { data: categories, createCategory } = useCategories()
   const [name, setName] = useState(profile?.display_name ?? '')
   const [projectName, setProjectName] = useState(project?.name ?? '')
@@ -109,6 +111,7 @@ export function SettingsPage() {
     <div className="space-y-6 pb-4">
       <header>
         <h1 className="font-display text-2xl font-bold">Innstillinger</h1>
+        <p className="text-sm text-muted mt-1">{sync.label}</p>
       </header>
 
       <section>
@@ -156,7 +159,11 @@ export function SettingsPage() {
               </Button>
             </div>
             <p className="text-xs text-muted mt-2">
-              Endringer lagres i skyen. Åpne med samme invitasjonskode på den andre enheten.
+              {sync.status === 'ok'
+                ? 'Endringer er lagret hos dere begge. Åpne med samme kode på den andre telefonen.'
+                : sync.status === 'pending'
+                  ? 'Lagrer hos dere begge…'
+                  : 'Kun på denne telefonen. Eksporter en sikkerhetskopi, eller sjekk nettverket.'}
             </p>
           </div>
 
@@ -233,6 +240,9 @@ export function SettingsPage() {
           </Button>
         </div>
         <Card>
+          <p className="text-xs text-muted mb-3">
+            Merkelapper på utgifter — rom er der budsjettet teller.
+          </p>
           {!categories?.length ? (
             <div className="text-center py-4 space-y-3">
               <p className="text-sm text-muted">Ingen kategorier ennå</p>
@@ -273,32 +283,59 @@ export function SettingsPage() {
         </div>
         <Card>
           <div className="space-y-3">
-            {members.map((member) => (
-              <div key={member.id} className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
-                  <span className="text-sm font-semibold text-primary">
-                    {(member.profile?.display_name ?? '?')[0].toUpperCase()}
-                  </span>
+            {members.map((member) => {
+              const memberName = member.profile?.display_name ?? member.display_name ?? 'Ukjent'
+              const isMe = member.id === memberId
+              return (
+                <div key={member.id} className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
+                    <span className="text-sm font-semibold text-primary">
+                      {memberName[0].toUpperCase()}
+                    </span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-sm">
+                      {memberName}
+                      {isMe ? <span className="text-xs text-muted font-normal"> (deg)</span> : null}
+                    </p>
+                    <p className="text-xs text-muted">
+                      Kan åpne prosjektet på flere enheter med invitasjonskoden
+                    </p>
+                  </div>
+                  {!isMe && (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      onClick={async () => {
+                        const { error } = await switchMember(member.id)
+                        if (error) toast.error(error)
+                        else toast.success(`Du er nå ${memberName}`)
+                      }}
+                    >
+                      Jeg er {memberName}
+                    </Button>
+                  )}
                 </div>
-                <div>
-                  <p className="font-medium text-sm">
-                    {member.profile?.display_name ?? 'Ukjent'}
-                    {member.id === memberId ? (
-                      <span className="text-xs text-muted font-normal"> (deg)</span>
-                    ) : null}
-                  </p>
-                  <p className="text-xs text-muted">
-                    Kan åpne prosjektet på flere enheter med invitasjonskoden
-                  </p>
-                </div>
-              </div>
-            ))}
+              )
+            })}
             {members.length < 2 && (
               <p className="text-xs text-muted pt-1">
                 Legg til partnerens navn her, eller be dem bruke «Åpne / bli med» med koden.
               </p>
             )}
           </div>
+        </Card>
+      </section>
+
+      <section className="homescreen-hint">
+        <SectionLabel icon={Smartphone} label="På telefonen" />
+        <Card>
+          <p className="text-sm font-medium mb-1">Legg på hjemskjerm</p>
+          <p className="text-xs text-muted">
+            iPhone: Del → Legg til på Hjem-skjerm. Android: meny → Legg til på startskjerm.
+            Da åpnes Renover i fullskjerm, uten nettleserfelt.
+          </p>
         </Card>
       </section>
 

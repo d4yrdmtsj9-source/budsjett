@@ -78,6 +78,42 @@ export function remainingBudget(budget: number, spent: number): number {
   return budget - spent
 }
 
+export function budgetRemaining(budget: number, bought: number, planned: number): number {
+  return budget - bought - planned
+}
+
+export function affordSentence(opts: {
+  amount: number
+  remaining: number
+  scope: string
+}): string | null {
+  const { amount, remaining, scope } = opts
+  if (amount <= 0) return null
+  if (remaining <= 0) {
+    return `Dette tar ${formatNOKPlain(amount)} — ${scope} er allerede over budsjett`
+  }
+  const over = amount - remaining
+  const base = `Dette tar ${formatNOKPlain(amount)} av ${formatNOKPlain(remaining)} som gjenstår i ${scope}`
+  return over > 0 ? `${base} (${formatNOKPlain(over)} over)` : base
+}
+
+export function overPlanSentence(opts: {
+  name: string
+  budget: number
+  projected: number
+}): string | null {
+  const { name, budget, projected } = opts
+  if (budget <= 0 || projected <= budget) return null
+  const pct = Math.round(((projected - budget) / budget) * 100)
+  return `${name} er ${pct} % over hvis vi kjøper alt planlagt`
+}
+
+function formatNOKPlain(amount: number): string {
+  return new Intl.NumberFormat('nb-NO', {
+    maximumFractionDigits: 0,
+  }).format(Math.round(amount))
+}
+
 export function defaultExpenseForm(): ExpenseFormData {
   return {
     description: '',

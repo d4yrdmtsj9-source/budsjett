@@ -113,3 +113,9 @@ input[type="number"]::-webkit-outer-spin-button {
 input[type="number"] {
   -moz-appearance: textfield;
 }
+
+@media (display-mode: standalone) {
+  .homescreen-hint {
+    display: none;
+  }
+}

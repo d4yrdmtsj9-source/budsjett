@@ -2,18 +2,16 @@ import { useParams, Link, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Pencil } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
-import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
-import { ProgressBar } from '@/components/ui/ProgressBar'
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner'
 import { Sheet } from '@/components/ui/Sheet'
 import { ExpenseList } from '@/components/expense/ExpenseRow'
+import { BudgetQuad } from '@/components/budget/BudgetQuad'
 import { useRoom, useRooms } from '@/hooks/useRooms'
 import { useExpenses } from '@/hooks/useExpenses'
 import { useExpenseSheet } from '@/hooks/useExpenseSheet'
-import { sumPaidExpenses, sumPlannedExpenses } from '@/lib/calc'
-import { formatNOK } from '@/lib/format'
+import { overPlanSentence, sumPaidExpenses, sumPlannedExpenses } from '@/lib/calc'
 
 export function RoomDetailPage() {
   const { roomId } = useParams<{ roomId: string }>()
@@ -31,6 +29,9 @@ export function RoomDetailPage() {
   const planned = sumPlannedExpenses(roomExpenses)
   const bought = sumPaidExpenses(roomExpenses)
   const projected = bought + planned
+  const warning = room
+    ? overPlanSentence({ name: room.name, budget: room.budget, projected })
+    : null
 
   const openEditSheet = () => {
     if (room) {
@@ -89,37 +90,18 @@ export function RoomDetailPage() {
         </div>
       </header>
 
-      <Card padding="lg">
-        <div className="grid grid-cols-2 gap-4 mb-4">
-          <div>
-            <p className="text-xs text-muted">Budsjett</p>
-            <p className="font-display text-lg font-semibold">{formatNOK(room.budget)}</p>
-          </div>
-          <div>
-            <p className="text-xs text-muted">Kjøpt</p>
-            <p className="font-display text-lg font-semibold">{formatNOK(bought)}</p>
-          </div>
-          <div>
-            <p className="text-xs text-muted">Planlagt</p>
-            <p className="font-display text-lg font-semibold">{formatNOK(planned)}</p>
-          </div>
-          <div>
-            <p className="text-xs text-muted">Gjenstår</p>
-            <p className={`font-display text-lg font-semibold ${room.budget - projected < 0 ? 'text-destructive' : ''}`}>
-              {formatNOK(room.budget - projected)}
-            </p>
-          </div>
-        </div>
-        {room.budget > 0 ? (
-          <ProgressBar
-            value={projected}
-            max={room.budget}
-            showLabel
-          />
-        ) : (
-          <p className="text-xs text-muted">Ingen rombudsjett — sett det under rediger</p>
-        )}
-      </Card>
+      <BudgetQuad
+        budget={room.budget}
+        bought={bought}
+        planned={planned}
+        footer={
+          warning ? (
+            <p className="mt-3 text-sm text-destructive">{warning}</p>
+          ) : room.budget <= 0 ? (
+            <p className="text-xs text-muted mt-3">Ingen rombudsjett — sett det under rediger</p>
+          ) : null
+        }
+      />
 
       <div className="flex justify-between items-center gap-2">
         <h2 className="font-display font-semibold">Utgifter</h2>

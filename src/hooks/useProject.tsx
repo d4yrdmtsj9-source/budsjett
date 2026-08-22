@@ -53,6 +53,8 @@ interface ProjectContextValue {
   updateProject: (updates: Partial<Pick<RenovationProjectView, 'name' | 'total_budget'>>) => Promise<{ error: string | null }>
   refreshProject: () => void
   setRawProject: (p: LocalProject) => Promise<void>
+  /** Switch who "I" am on this phone — no logout, same project. */
+  switchMember: (memberId: string) => Promise<{ error: string | null }>
 }
 
 const ProjectContext = createContext<ProjectContextValue | null>(null)
@@ -355,6 +357,28 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  const switchMember = async (memberId: string) => {
+    try {
+      if (!rawProject || !session) return { error: 'Ingen prosjekt' }
+      const found = rawProject.members.find((m) => m.id === memberId)
+      if (!found) return { error: 'Personen finnes ikke' }
+      const member = attachDevice(found, session.deviceKey)
+      const next: LocalProject = {
+        ...rawProject,
+        members: rawProject.members.map((m) => (m.id === member.id ? member : m)),
+      }
+      await setRawProject(next)
+      await setSession({
+        ...session,
+        memberId: member.id,
+        displayName: member.display_name,
+      })
+      return { error: null }
+    } catch (e) {
+      return { error: e instanceof Error ? e.message : 'Kunne ikke bytte person' }
+    }
+  }
+
   const updateProjectFields = async (
     updates: Partial<Pick<RenovationProjectView, 'name' | 'total_budget'>>,
   ) => {
@@ -386,6 +410,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
           void refreshProject()
         },
         setRawProject,
+        switchMember,
       }}
     >
       {children}

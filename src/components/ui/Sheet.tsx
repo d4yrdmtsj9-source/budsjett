@@ -1,6 +1,26 @@
 import { cn } from '@/lib/utils'
 import { X } from 'lucide-react'
-import type { ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
+
+function useKeyboardInset() {
+  const [inset, setInset] = useState(0)
+  useEffect(() => {
+    const vv = window.visualViewport
+    if (!vv) return
+    const update = () => {
+      const hidden = Math.max(0, window.innerHeight - vv.height - vv.offsetTop)
+      setInset(hidden)
+    }
+    update()
+    vv.addEventListener('resize', update)
+    vv.addEventListener('scroll', update)
+    return () => {
+      vv.removeEventListener('resize', update)
+      vv.removeEventListener('scroll', update)
+    }
+  }, [])
+  return inset
+}
 
 interface SheetProps {
   open: boolean
@@ -16,6 +36,7 @@ interface SheetProps {
  * show the footer over the page while the fields sit under the keyboard.
  */
 export function Sheet({ open, onClose, title, subtitle, children }: SheetProps) {
+  const keyboardInset = useKeyboardInset()
   if (!open) return null
 
   return (
@@ -42,7 +63,12 @@ export function Sheet({ open, onClose, title, subtitle, children }: SheetProps) 
             <X className="h-5 w-5" />
           </button>
         </header>
-        <div className={cn('px-4 py-4 pb-10')}>{children}</div>
+        <div
+          className={cn('px-4 py-4')}
+          style={{ paddingBottom: `calc(2.5rem + ${keyboardInset}px + env(safe-area-inset-bottom, 0px))` }}
+        >
+          {children}
+        </div>
       </div>
     </div>
   )

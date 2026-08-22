@@ -1,8 +1,11 @@
 import type { LocalProject } from '@/lib/localStore'
 import { mergeProjects, projectFingerprint } from '@/lib/mergeProjects'
+import { setCloudSyncStatus } from '@/lib/syncStatus'
 
 const NS = 'renover-budsjett-0a6e'
 const KEY = (import.meta.env.VITE_MANTLE_KEY as string | undefined) ?? ''
+
+if (!KEY) setCloudSyncStatus('local-only')
 
 function entryUrl(inviteCode: string) {
   return `https://mantledb.sh/v2/${NS}/${encodeURIComponent(inviteCode)}`
@@ -45,10 +48,14 @@ export async function pullCloudProject(inviteCode: string): Promise<LocalProject
   }
 }
 
-export async function pushCloudProject(project: LocalProject): Promise<void> {
-  if (!KEY || !project.invite_code) return
+export async function pushCloudProject(project: LocalProject): Promise<boolean> {
+  if (!KEY || !project.invite_code) {
+    setCloudSyncStatus('local-only')
+    return false
+  }
   const code = project.invite_code.toUpperCase()
   const body = slim(project)
+  setCloudSyncStatus('pending')
   try {
     let res = await fetch(entryUrl(code), {
       method: 'POST',
@@ -71,15 +78,21 @@ export async function pushCloudProject(project: LocalProject): Promise<void> {
         cache: 'no-store',
         body: JSON.stringify({ public_read: true }),
       })
+      setCloudSyncStatus('ok')
+      return true
     }
+    setCloudSyncStatus('local-only')
+    return false
   } catch {
-    // Cloud persist is best-effort
+    setCloudSyncStatus('local-only')
+    return false
   }
 }
 
 let pushTimer: ReturnType<typeof setTimeout> | null = null
 
 export function scheduleCloudPush(project: LocalProject) {
+  setCloudSyncStatus('pending')
   if (pushTimer) clearTimeout(pushTimer)
   pushTimer = setTimeout(() => {
     void pushCloudProject(project)
@@ -95,8 +108,10 @@ export async function mergeCloudProject(
   if (!local && !cloud) return null
   if (!cloud) {
     if (local) void pushCloudProject(local)
+    else setCloudSyncStatus('local-only')
     return local
   }
+  setCloudSyncStatus('ok')
   if (!local) return cloud
   if (local.id !== cloud.id) {
     const newer = new Date(cloud.updated_at) >= new Date(local.updated_at) ? cloud : local

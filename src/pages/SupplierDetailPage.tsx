@@ -1,11 +1,9 @@
 import { useParams, Link } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
-import { Card } from '@/components/ui/Card'
-import { ProgressBar } from '@/components/ui/ProgressBar'
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner'
 import { ExpenseList } from '@/components/expense/ExpenseRow'
+import { BudgetQuad } from '@/components/budget/BudgetQuad'
 import { useSupplier } from '@/hooks/useSuppliers'
-import { formatNOK } from '@/lib/format'
 
 export function SupplierDetailPage() {
   const { name } = useParams<{ name: string }>()
@@ -40,28 +38,18 @@ export function SupplierDetailPage() {
         </p>
       </header>
 
-      <Card padding="lg">
-        <div className="grid grid-cols-2 gap-4 mb-4">
-          <div>
-            <p className="text-xs text-muted">Kjøpt</p>
-            <p className="font-display text-lg font-semibold">
-              {formatNOK(supplier.paidAmount)}
+      <BudgetQuad
+        bought={supplier.paidAmount}
+        planned={supplier.plannedAmount}
+        showBar={false}
+        footer={
+          supplier.totalAmount > 0 ? (
+            <p className="text-xs text-muted mt-3">
+              {supplier.expenseCount} utgift{supplier.expenseCount !== 1 ? 'er' : ''} i denne butikken
             </p>
-          </div>
-          <div>
-            <p className="text-xs text-muted">Planlagt</p>
-            <p className="font-display text-lg font-semibold">
-              {formatNOK(supplier.plannedAmount)}
-            </p>
-          </div>
-        </div>
-        {supplier.totalAmount > 0 && (
-          <div>
-            <p className="text-xs text-muted mb-1">Andel kjøpt</p>
-            <ProgressBar value={supplier.paidAmount} max={supplier.totalAmount} size="sm" />
-          </div>
-        )}
-      </Card>
+          ) : null
+        }
+      />
 
       <h2 className="font-display font-semibold">Utgifter</h2>
       <ExpenseList expenses={supplier.expenses} showRoom />

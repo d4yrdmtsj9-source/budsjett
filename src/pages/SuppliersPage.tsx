@@ -34,28 +34,24 @@ export function SuppliersPage() {
               to={`/leverandorer/${encodeURIComponent(supplier.name)}`}
             >
               <Card>
-                <div className="flex justify-between items-start mb-2">
+                <h3 className="font-display font-semibold mb-2">{supplier.name}</h3>
+                <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <h3 className="font-display font-semibold">{supplier.name}</h3>
-                    <p className="text-sm text-muted">
-                      {supplier.expenseCount} utgift
-                      {supplier.expenseCount !== 1 ? 'er' : ''}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <p className="font-display font-semibold">
+                    <p className="text-xs text-muted">Kjøpt</p>
+                    <p className="font-display text-sm font-semibold">
                       {formatNOK(supplier.paidAmount)}
                     </p>
-                    <p className="text-xs text-muted">Kjøpt</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted">Planlagt</p>
+                    <p className="font-display text-sm font-semibold">
+                      {formatNOK(supplier.plannedAmount)}
+                    </p>
                   </div>
                 </div>
-                {supplier.plannedAmount > 0 && (
-                  <p className="text-xs text-muted mb-2">
-                    {formatNOK(supplier.plannedAmount)} planlagt
-                  </p>
-                )}
                 {supplier.totalAmount > 0 && (
                   <ProgressBar
+                    className="mt-2"
                     value={supplier.paidAmount}
                     max={supplier.totalAmount}
                     size="sm"

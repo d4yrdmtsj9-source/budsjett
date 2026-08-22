@@ -5,6 +5,7 @@ import { Sheet } from '@/components/ui/Sheet'
 import { Input } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
 import { Button } from '@/components/ui/Button'
+import { MoneyInput } from '@/components/ui/MoneyInput'
 import { useExpenseSheet, type ExpenseSheetMode } from '@/hooks/useExpenseSheet'
 import { useExpenses } from '@/hooks/useExpenses'
 import { useRooms } from '@/hooks/useRooms'
@@ -18,6 +19,10 @@ import {
   defaultExpenseForm,
   expenseToForm,
   getExpenseTotal,
+  sumPaidExpenses,
+  sumPlannedExpenses,
+  budgetRemaining,
+  affordSentence,
 } from '@/lib/calc'
 import { formatNOK } from '@/lib/format'
 import { DEFAULT_UNITS, type Expense, type ExpenseFormData, type ExpenseStatus } from '@/lib/types'
@@ -90,6 +95,7 @@ function QtyPriceFields({
         type="number"
         min={0}
         step="any"
+        inputMode="decimal"
         value={form.quantity || ''}
         onChange={(e) =>
           onUpdate({ quantity: parseFloat(e.target.value) || 0, total_override: null })
@@ -106,6 +112,7 @@ function QtyPriceFields({
         type="number"
         min={0}
         step="any"
+        inputMode="decimal"
         value={form.unit_price || ''}
         onChange={(e) =>
           onUpdate({ unit_price: parseFloat(e.target.value) || 0, total_override: null })
@@ -122,14 +129,15 @@ export function ExpenseSheet() {
     defaultRoomId,
     defaultStatus,
     mode,
+    focusField,
     formInstanceId,
     setEditingExpense,
     close,
   } = useExpenseSheet()
-  const { createExpense, updateExpense } = useExpenses()
+  const { createExpense, updateExpense, expenses } = useExpenses()
   const { data: rooms } = useRooms()
   const { data: categories } = useCategories()
-  const { members } = useProject()
+  const { members, project } = useProject()
   const { memberId } = useAuth()
 
   const roomOptions = (rooms ?? []).map((r) => ({ value: r.id, label: r.name }))
@@ -151,7 +159,6 @@ export function ExpenseSheet() {
         ...initialForm,
         status: 'purchased',
         who_paid: memberId ?? initialForm.who_paid,
-        // Keep planned quantity / unit / unit_price as starting point
       }
     } else if (layout === 'plan') {
       initialForm = { ...initialForm, status: 'planned' }
@@ -215,10 +222,14 @@ export function ExpenseSheet() {
           initial={initialForm}
           expenseId={editingExpense?.id ?? null}
           layout={layout}
+          focusAmount={isBuyLike && focusField === 'unit_price'}
           plannedSummary={plannedSummary}
           roomOptions={roomOptions}
           categoryOptions={categoryOptions}
           memberOptions={memberOptions}
+          rooms={rooms ?? []}
+          expenses={expenses}
+          projectBudget={project?.total_budget ?? 0}
           onCreated={(expense) => setEditingExpense(toExpenseView(expense))}
           onClose={close}
           registerCloseHandler={(fn) => {
@@ -236,10 +247,14 @@ function ExpenseForm({
   initial,
   expenseId,
   layout,
+  focusAmount,
   plannedSummary,
   roomOptions,
   categoryOptions,
   memberOptions,
+  rooms,
+  expenses,
+  projectBudget,
   onCreated,
   onClose,
   registerCloseHandler,
@@ -249,6 +264,7 @@ function ExpenseForm({
   initial: ExpenseFormData
   expenseId: string | null
   layout: FormLayout
+  focusAmount: boolean
   plannedSummary: {
     description: string
     estimate: number
@@ -257,6 +273,9 @@ function ExpenseForm({
   roomOptions: { value: string; label: string }[]
   categoryOptions: { value: string; label: string }[]
   memberOptions: { value: string; label: string }[]
+  rooms: { id: string; name: string; budget: number }[]
+  expenses: Expense[]
+  projectBudget: number
   onCreated: (expense: LocalExpense) => void
   onClose: () => void
   registerCloseHandler: (fn: () => void) => void
@@ -268,22 +287,29 @@ function ExpenseForm({
   }) => Promise<unknown>
 }) {
   const lockedStatus: ExpenseStatus = layout === 'plan' ? 'planned' : 'purchased'
+  const isBuyLike = layout === 'buy' || layout === 'convert'
   const [form, setForm] = useState<ExpenseFormData>({
     ...initial,
     status: lockedStatus,
   })
   const [savedId, setSavedId] = useState<string | null>(expenseId)
+  const [showMore, setShowMore] = useState(false)
   const [showDiscount, setShowDiscount] = useState(
-    layout !== 'plan' || !!(initial.discount_percent || initial.discount_amount),
+    !!(initial.discount_percent || initial.discount_amount),
   )
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle')
   const formRef = useRef(form)
   const savedIdRef = useRef(savedId)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const creatingRef = useRef(false)
+  const amountRef = useRef<HTMLInputElement>(null)
 
   formRef.current = form
   savedIdRef.current = savedId
+
+  useEffect(() => {
+    if (focusAmount) amountRef.current?.focus()
+  }, [focusAmount])
 
   const persist = async (nextForm: ExpenseFormData, id: string | null) => {
     const locked: ExpenseFormData = {
@@ -343,9 +369,8 @@ function ExpenseForm({
       timerRef.current = null
     }
     const current = formRef.current
-    let id = savedIdRef.current
     if (isMeaningful(current)) {
-      id = await persist(current, id)
+      await persist(current, savedIdRef.current)
     }
     onClose()
   }
@@ -366,6 +391,23 @@ function ExpenseForm({
   const subtotal = calculateSubtotal(form.quantity, form.unit_price)
   const discount = calculateDiscount(subtotal, form.discount_percent, form.discount_amount)
 
+  const others = expenses.filter((e) => e.id !== savedId && !e.deleted_at)
+  const room = rooms.find((r) => r.id === form.room_id)
+  const scopeBudget = room && room.budget > 0 ? room.budget : projectBudget
+  const scopeExpenses = room ? others.filter((e) => e.room_id === room.id) : others
+  const remaining = scopeBudget
+    ? budgetRemaining(scopeBudget, sumPaidExpenses(scopeExpenses), sumPlannedExpenses(scopeExpenses))
+    : 0
+  const scopeName = room?.name.toLowerCase() ?? 'prosjektet'
+  const afford =
+    scopeBudget > 0 ? affordSentence({ amount: total, remaining, scope: scopeName }) : null
+
+  const roomName = rooms.find((r) => r.id === form.room_id)?.name
+  const payerName = memberOptions.find((m) => m.value === form.who_paid)?.label
+  const defaultsHint = [form.supplier.trim() || null, roomName, isBuyLike ? payerName : null]
+    .filter(Boolean)
+    .join(' · ')
+
   const saveLabel =
     saveState === 'saving' ? 'Lagrer…' : saveState === 'saved' ? 'Lagret' : 'Endringer lagres automatisk'
 
@@ -375,7 +417,7 @@ function ExpenseForm({
         e.preventDefault()
         void flushAndClose()
       }}
-      className="space-y-4"
+      className="space-y-4 pb-16"
     >
       <p className="text-xs text-muted -mt-1">{saveLabel}</p>
 
@@ -392,18 +434,32 @@ function ExpenseForm({
 
       {layout !== 'convert' && (
         <Input
-          label="Beskrivelse"
+          label={isBuyLike ? 'Hva' : 'Beskrivelse'}
           value={form.description === 'Uten tittel' ? '' : form.description}
           onChange={(e) => update({ description: e.target.value })}
           placeholder={layout === 'plan' ? 'F.eks. Parkett eik' : 'Hva kjøpte du?'}
+          autoFocus={!focusAmount}
         />
       )}
 
-      <QtyPriceFields
-        form={form}
-        priceLabel="Pris/enhet"
-        onUpdate={update}
-      />
+      {isBuyLike ? (
+        <MoneyInput
+          ref={amountRef}
+          label="Beløp"
+          value={total}
+          autoFocus={focusAmount}
+          onChange={(amount) =>
+            update({
+              quantity: 1,
+              unit: form.unit || 'stk',
+              unit_price: amount,
+              total_override: null,
+            })
+          }
+        />
+      ) : (
+        <QtyPriceFields form={form} priceLabel="Pris/enhet" onUpdate={update} />
+      )}
 
       {layout === 'plan' && (
         <div className="rounded-xl bg-primary/5 border border-primary/10 p-4">
@@ -419,144 +475,154 @@ function ExpenseForm({
         </div>
       )}
 
-      <Input
-        label="Butikk"
-        value={form.supplier}
-        onChange={(e) => update({ supplier: e.target.value })}
-        placeholder="F.eks. Byggmakker"
-      />
+      {afford && <p className="text-sm text-muted">{afford}</p>}
 
-      {(layout === 'buy' || layout === 'convert') && (
-        <>
-          <div className="rounded-xl bg-primary/5 border border-primary/10 p-4">
-            <div className="flex justify-between text-sm">
-              <span className="text-muted">Subtotal</span>
-              <span>{formatNOK(subtotal)}</span>
-            </div>
-            {discount > 0 && (
-              <div className="flex justify-between text-sm mt-1 text-emerald-700">
-                <span>Rabatt</span>
-                <span>−{formatNOK(discount)}</span>
-              </div>
-            )}
-            <div className="flex justify-between font-display text-lg font-semibold mt-2 pt-2 border-t border-primary/10">
-              <span>Totalt</span>
-              <span className="text-primary">{formatNOK(total)}</span>
-            </div>
-          </div>
-
-          <Select
-            label="Betalt av"
-            value={form.who_paid}
-            onChange={(e) => update({ who_paid: e.target.value })}
-            options={memberOptions}
-            placeholder="Velg person"
-          />
-        </>
-      )}
-
-      <Select
-        label="Rom"
-        value={form.room_id ?? ''}
-        onChange={(e) => update({ room_id: e.target.value || null })}
-        options={roomOptions}
-        placeholder="Velg rom"
-      />
-
-      <Select
-        label="Kategori"
-        value={form.category_id ?? ''}
-        onChange={(e) => update({ category_id: e.target.value || null })}
-        options={categoryOptions}
-        placeholder="Velg kategori"
-      />
-
-      <InlineNewCategory onCreated={(id) => update({ category_id: id })} />
-
-      {layout === 'buy' && (
-        <button
-          type="button"
-          onClick={() => {
-            void (async () => {
-              if (timerRef.current) {
-                clearTimeout(timerRef.current)
-                timerRef.current = null
-              }
-              const current: ExpenseFormData = {
-                ...formRef.current,
-                status: 'planned',
-                who_paid: '',
-              }
-              let id = savedIdRef.current
-              if (id) {
-                await updateExpense({ id, form: current })
-                toast.success('Satt tilbake til planlagt')
-              } else if (isMeaningful(current)) {
-                await createExpense(current)
-                toast.success('Satt tilbake til planlagt')
-              }
-              onClose()
-            })()
-          }}
-          className="w-full text-sm text-muted font-medium py-2"
-        >
-          Sett tilbake til planlagt
-        </button>
-      )}
-
-      {(layout === 'buy' || layout === 'convert') && (
-        <>
-          <button
-            type="button"
-            onClick={() => setShowDiscount(!showDiscount)}
-            className="flex items-center gap-2 text-sm text-primary font-medium"
-          >
-            {showDiscount ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-            Rabatt
-          </button>
-
-          {showDiscount && (
-            <div className="grid grid-cols-2 gap-3 pl-2 border-l-2 border-primary/20">
-              <Input
-                label="Rabatt %"
-                type="number"
-                min={0}
-                max={100}
-                value={form.discount_percent ?? ''}
-                onChange={(e) =>
-                  update({
-                    discount_percent: e.target.value ? parseFloat(e.target.value) : null,
-                    discount_amount: null,
-                  })
-                }
-              />
-              <Input
-                label="Rabatt kr"
-                type="number"
-                min={0}
-                value={form.discount_amount ?? ''}
-                onChange={(e) =>
-                  update({
-                    discount_amount: e.target.value ? parseFloat(e.target.value) : null,
-                    discount_percent: null,
-                  })
-                }
-              />
-            </div>
-          )}
-
-          <Input
-            label="Dato"
-            type="date"
-            value={form.expense_date}
-            onChange={(e) => update({ expense_date: e.target.value })}
-          />
-        </>
+      {defaultsHint && (
+        <p className="text-xs text-muted">{defaultsHint}</p>
       )}
 
       <Button type="submit" size="lg" className="w-full">
         Ferdig
       </Button>
+
+      <button
+        type="button"
+        onClick={() => setShowMore((v) => !v)}
+        className="flex items-center gap-2 text-sm text-primary font-medium"
+      >
+        {showMore ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+        Mer
+      </button>
+
+      {showMore && (
+        <div className="space-y-4 pt-1">
+          <Input
+            label="Butikk"
+            value={form.supplier}
+            onChange={(e) => update({ supplier: e.target.value })}
+            placeholder="F.eks. Byggmakker"
+          />
+
+          {isBuyLike && (
+            <Select
+              label="Betalt av"
+              value={form.who_paid}
+              onChange={(e) => update({ who_paid: e.target.value })}
+              options={memberOptions}
+              placeholder="Velg person"
+            />
+          )}
+
+          <Select
+            label="Rom"
+            value={form.room_id ?? ''}
+            onChange={(e) => update({ room_id: e.target.value || null })}
+            options={roomOptions}
+            placeholder="Velg rom"
+          />
+
+          <Select
+            label="Kategori"
+            value={form.category_id ?? ''}
+            onChange={(e) => update({ category_id: e.target.value || null })}
+            options={categoryOptions}
+            placeholder="Valgfritt"
+          />
+
+          <InlineNewCategory onCreated={(id) => update({ category_id: id })} />
+
+          {isBuyLike && (
+            <QtyPriceFields form={form} priceLabel="Pris/enhet" onUpdate={update} />
+          )}
+
+          {layout === 'buy' && (
+            <button
+              type="button"
+              onClick={() => {
+                void (async () => {
+                  if (timerRef.current) {
+                    clearTimeout(timerRef.current)
+                    timerRef.current = null
+                  }
+                  const current: ExpenseFormData = {
+                    ...formRef.current,
+                    status: 'planned',
+                    who_paid: '',
+                  }
+                  const id = savedIdRef.current
+                  if (id) {
+                    await updateExpense({ id, form: current })
+                    toast.success('Satt tilbake til planlagt')
+                  } else if (isMeaningful(current)) {
+                    await createExpense(current)
+                    toast.success('Satt tilbake til planlagt')
+                  }
+                  onClose()
+                })()
+              }}
+              className="w-full text-sm text-muted font-medium py-2"
+            >
+              Sett tilbake til planlagt
+            </button>
+          )}
+
+          {isBuyLike && (
+            <>
+              <button
+                type="button"
+                onClick={() => setShowDiscount(!showDiscount)}
+                className="flex items-center gap-2 text-sm text-primary font-medium"
+              >
+                {showDiscount ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                Rabatt
+              </button>
+
+              {showDiscount && (
+                <div className="grid grid-cols-2 gap-3 pl-2 border-l-2 border-primary/20">
+                  <Input
+                    label="Rabatt %"
+                    type="number"
+                    min={0}
+                    max={100}
+                    inputMode="decimal"
+                    value={form.discount_percent ?? ''}
+                    onChange={(e) =>
+                      update({
+                        discount_percent: e.target.value ? parseFloat(e.target.value) : null,
+                        discount_amount: null,
+                      })
+                    }
+                  />
+                  <Input
+                    label="Rabatt kr"
+                    type="number"
+                    min={0}
+                    inputMode="decimal"
+                    value={form.discount_amount ?? ''}
+                    onChange={(e) =>
+                      update({
+                        discount_amount: e.target.value ? parseFloat(e.target.value) : null,
+                        discount_percent: null,
+                      })
+                    }
+                  />
+                </div>
+              )}
+
+              {discount > 0 && (
+                <p className="text-sm text-emerald-700">Rabatt −{formatNOK(discount)}</p>
+              )}
+
+              <Input
+                label="Dato"
+                type="date"
+                value={form.expense_date}
+                onChange={(e) => update({ expense_date: e.target.value })}
+              />
+            </>
+          )}
+        </div>
+      )}
     </form>
   )
 }
