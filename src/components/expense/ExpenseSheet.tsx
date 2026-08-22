@@ -7,7 +7,7 @@ import { Select } from '@/components/ui/Select'
 import { Button } from '@/components/ui/Button'
 import { MoneyInput } from '@/components/ui/MoneyInput'
 import { SuggestInput } from '@/components/ui/SuggestInput'
-import { uniqueSuggestions, normalizeSuggest } from '@/lib/suggest'
+import { uniqueSuggestions, normalizeSuggest, firstLine } from '@/lib/suggest'
 import { useExpenseSheet, type ExpenseSheetMode } from '@/hooks/useExpenseSheet'
 import { useExpenses } from '@/hooks/useExpenses'
 import { useRooms } from '@/hooks/useRooms'
@@ -425,7 +425,9 @@ function ExpenseForm({
     : ''
 
   const descriptionSuggestions = uniqueSuggestions(
-    expenses.map((e) => (e.description === 'Uten tittel' ? '' : e.description)),
+    expenses.map((e) =>
+      e.description === 'Uten tittel' ? '' : firstLine(e.description),
+    ),
   )
   const shopSuggestions = uniqueSuggestions(expenses.map((e) => e.supplier))
   const categorySuggestions = uniqueSuggestions(categories.map((c) => c.name))
@@ -452,7 +454,7 @@ function ExpenseForm({
       {layout === 'convert' && plannedSummary && (
         <div className="rounded-xl border border-border bg-white/70 px-4 py-3">
           <p className="text-xs text-muted uppercase tracking-wide">Fra plan</p>
-          <p className="font-medium mt-0.5">{plannedSummary.description}</p>
+          <p className="font-medium mt-0.5 whitespace-pre-wrap">{plannedSummary.description}</p>
           <p className="text-sm text-muted mt-1">
             {plannedSummary.qtyHint ? `${plannedSummary.qtyHint} · ` : ''}
             Estimat {formatNOK(plannedSummary.estimate)}
@@ -462,12 +464,17 @@ function ExpenseForm({
 
       {layout !== 'convert' && (
         <SuggestInput
-          label="Hva"
+          label={layout === 'plan' ? 'Beskrivelse' : 'Hva'}
           value={form.description === 'Uten tittel' ? '' : form.description}
           onChange={(description) => update({ description })}
           suggestions={descriptionSuggestions}
-          placeholder={layout === 'plan' ? 'F.eks. Parkett eik' : 'Hva kjøpte du?'}
+          placeholder={
+            layout === 'plan'
+              ? 'Hva skal kjøpes, merke, mål, farge — så mye dere trenger'
+              : 'Hva kjøpte du?'
+          }
           autoFocus={!focusAmount}
+          multiline={layout === 'plan'}
         />
       )}
 

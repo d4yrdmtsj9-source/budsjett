@@ -1,3 +1,7 @@
+export function firstLine(value: string) {
+  return value.split(/\r?\n/, 1)[0] ?? ''
+}
+
 export function normalizeSuggest(value: string) {
   return value.trim().toLocaleLowerCase('nb-NO')
 }
