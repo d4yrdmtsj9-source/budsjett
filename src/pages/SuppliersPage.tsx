@@ -37,15 +37,15 @@ export function SuppliersPage() {
                 <h3 className="font-display font-semibold mb-2">{supplier.name}</h3>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <p className="text-xs text-muted">Kjøpt</p>
+                    <p className="text-xs text-muted">Å kjøpe</p>
                     <p className="font-display text-sm font-semibold">
-                      {formatNOK(supplier.paidAmount)}
+                      {supplier.plannedAmount > 0 ? formatNOK(supplier.plannedAmount) : '—'}
                     </p>
                   </div>
                   <div>
-                    <p className="text-xs text-muted">Planlagt</p>
+                    <p className="text-xs text-muted">Kjøpt</p>
                     <p className="font-display text-sm font-semibold">
-                      {formatNOK(supplier.plannedAmount)}
+                      {formatNOK(supplier.paidAmount)}
                     </p>
                   </div>
                 </div>

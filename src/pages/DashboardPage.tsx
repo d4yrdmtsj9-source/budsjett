@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { PiggyBank, ArrowRight, Plus, Home } from 'lucide-react'
+import { PiggyBank, ArrowRight, Plus, Home, ClipboardList } from 'lucide-react'
 import { Card, CardHeader, CardTitle } from '@/components/ui/Card'
 import { LoadingSpinner, EmptyState } from '@/components/ui/LoadingSpinner'
 import { ExpenseList } from '@/components/expense/ExpenseRow'
@@ -14,12 +14,14 @@ import { useCloudSync } from '@/hooks/useCloudSync'
 import { useAuth } from '@/hooks/useAuth'
 import {
   getExpenseTotal,
+  isBoughtStatus,
   sumPaidExpenses,
   sumPlannedExpenses,
   sumProjectedExpenses,
   overPlanSentence,
 } from '@/lib/calc'
 import { formatNOK } from '@/lib/format'
+import type { Expense } from '@/lib/types'
 
 export function DashboardPage() {
   const { project, members } = useProject()
@@ -65,7 +67,7 @@ export function DashboardPage() {
   }, [rooms, expenses])
 
   const paidByPerson = useMemo(() => {
-    const purchases = expenses.filter((e) => e.status === 'purchased' || e.status === 'paid')
+    const purchases = expenses.filter((e) => isBoughtStatus(e.status))
     if (members.length < 2 || purchases.length === 0) return null
     const rows = members.map((m) => ({
       id: m.id,
@@ -87,7 +89,7 @@ export function DashboardPage() {
   const recentPurchases = useMemo(
     () =>
       [...expenses]
-        .filter((e) => e.status === 'purchased' || e.status === 'paid')
+        .filter((e) => isBoughtStatus(e.status))
         .sort((a, b) => {
           const da = a.expense_date ?? a.created_at
           const db = b.expense_date ?? b.created_at
@@ -97,12 +99,25 @@ export function DashboardPage() {
     [expenses],
   )
 
-  const plannedExpenses = useMemo(
-    () => expenses.filter((e) => e.status === 'planned' || e.status === 'quoted' || e.status === 'ordered').slice(0, 5),
-    [expenses],
-  )
+  const buyList = useMemo(() => {
+    const planned = expenses.filter((e) => !isBoughtStatus(e.status))
+    const groups: { key: string; title: string; roomId: string | null; items: Expense[] }[] = []
+    for (const room of rooms ?? []) {
+      const items = planned.filter((e) => e.room_id === room.id)
+      if (items.length) groups.push({ key: room.id, title: room.name, roomId: room.id, items })
+    }
+    const unassigned = planned.filter((e) => !e.room_id)
+    if (unassigned.length) {
+      groups.push({ key: 'none', title: 'Uten rom', roomId: null, items: unassigned })
+    }
+    return groups
+  }, [expenses, rooms])
+
+  const plannedCount = buyList.reduce((n, g) => n + g.items.length, 0)
 
   if (isLoading) return <LoadingSpinner />
+
+  const firstRoom = rooms?.[0]
 
   return (
     <div className="space-y-6 pb-4">
@@ -129,8 +144,10 @@ export function DashboardPage() {
             ) : stats.underBudget > 0 && stats.totalBudget > 0 ? (
               <div className="mt-3 flex items-center gap-2 text-sm text-emerald-700">
                 <PiggyBank className="h-4 w-4" />
-                <span>{formatNOK(stats.underBudget)} under budsjett hvis alt kjøpes</span>
+                <span>{formatNOK(stats.underBudget)} under budsjett hvis dere kjøper alt planlagt</span>
               </div>
+            ) : stats.totalBudget > 0 && stats.planned === 0 && stats.bought === 0 ? (
+              <p className="mt-3 text-sm text-muted">Planlegg det dere tror dere skal kjøpe — så ser dere om det får plass.</p>
             ) : null}
             {stats.discountSavings > 0 && (
               <p className="mt-2 text-sm text-muted">
@@ -140,6 +157,125 @@ export function DashboardPage() {
           </>
         }
       />
+
+      <section>
+        <SectionHeader title="Å kjøpe" to="/utgifter" />
+        {plannedCount === 0 ? (
+          <EmptyState
+            icon={ClipboardList}
+            title={firstRoom ? `Planlegg første ting i ${firstRoom.name.toLowerCase()}` : 'Ingenting planlagt ennå'}
+            description="Legg inn det dere tror dere skal kjøpe, i riktig rom, med et grovt estimat."
+            action={
+              <button
+                type="button"
+                onClick={() =>
+                  openNew({
+                    status: 'planned',
+                    roomId: firstRoom?.id,
+                  })
+                }
+                className="text-sm font-medium text-primary"
+              >
+                Planlegg første ting
+              </button>
+            }
+          />
+        ) : (
+          <div className="space-y-5">
+            {buyList.map((group) => (
+              <div key={group.key}>
+                {group.roomId ? (
+                  <Link
+                    to={`/rom/${group.roomId}`}
+                    className="font-display font-semibold text-sm mb-2 inline-flex items-center gap-1"
+                  >
+                    {group.title}
+                    <ArrowRight className="h-3.5 w-3.5 text-muted" />
+                  </Link>
+                ) : (
+                  <p className="font-display font-semibold text-sm mb-2">{group.title}</p>
+                )}
+                <ExpenseList expenses={group.items} showRoom={false} />
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section>
+        <CardHeader>
+          <CardTitle className="text-base">Per rom</CardTitle>
+          <button
+            type="button"
+            onClick={() => setShowAddRoom(true)}
+            className="text-sm text-primary flex items-center gap-1"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Nytt rom
+          </button>
+        </CardHeader>
+        {byRoom.length === 0 ? (
+          <EmptyState
+            icon={Home}
+            title="Ingen rom ennå"
+            description="Del opp i rom, så planlegger dere hva som skal kjøpes i hvert."
+            action={
+              <button
+                type="button"
+                onClick={() => setShowAddRoom(true)}
+                className="text-sm font-medium text-primary"
+              >
+                Opprett første rom
+              </button>
+            }
+          />
+        ) : (
+          <div className="flex flex-col gap-3">
+            {byRoom.map(({ room, bought, planned, projected }) => {
+              const warning = overPlanSentence({
+                name: room.name,
+                budget: room.budget,
+                projected,
+              })
+              return (
+                <Link key={room.id} to={`/rom/${room.id}`} className="block">
+                  <Card padding="sm">
+                    <div className="flex items-start justify-between gap-3 mb-2">
+                      <p className="font-medium text-sm">{room.name}</p>
+                      <div className="text-right shrink-0">
+                        <p className="text-[10px] uppercase tracking-wide text-muted">Planlagt</p>
+                        <p className="font-display font-semibold text-sm">
+                          {planned > 0 ? formatNOK(planned) : '—'}
+                        </p>
+                      </div>
+                    </div>
+                    <BudgetQuad
+                      budget={room.budget}
+                      bought={bought}
+                      planned={planned}
+                      compact
+                      framed={false}
+                    />
+                    {warning ? (
+                      <p className="mt-2 text-xs text-destructive">{warning}</p>
+                    ) : room.budget > 0 ? (
+                      <p className="mt-2 text-xs text-muted">
+                        {formatNOK(room.budget - projected)} gjenstår hvis dere kjøper alt planlagt
+                      </p>
+                    ) : planned === 0 && bought === 0 ? (
+                      <p className="mt-2 text-xs text-muted">Planlegg første ting her</p>
+                    ) : bought > 0 ? (
+                      <p className="mt-2 text-xs text-muted">{formatNOK(bought)} kjøpt</p>
+                    ) : null}
+                  </Card>
+                </Link>
+              )
+            })}
+          </div>
+        )}
+      </section>
+
+      <AddRoomSheet open={showAddRoom} onClose={() => setShowAddRoom(false)} />
 
       {paidByPerson && (
         <Card padding="sm">
@@ -166,93 +302,10 @@ export function DashboardPage() {
         </Card>
       )}
 
-      <section>
-        <CardHeader>
-          <CardTitle className="text-base">Per rom</CardTitle>
-          <button
-            type="button"
-            onClick={() => setShowAddRoom(true)}
-            className="text-sm text-primary flex items-center gap-1"
-          >
-            <Plus className="h-3.5 w-3.5" />
-            Nytt rom
-          </button>
-        </CardHeader>
-        {byRoom.length === 0 ? (
-          <EmptyState
-            icon={Home}
-            title="Ingen rom ennå"
-            description="Del opp prosjektet i rom, så ser dere hva som er kjøpt og hva som gjenstår"
-            action={
-              <button
-                type="button"
-                onClick={() => setShowAddRoom(true)}
-                className="text-sm font-medium text-primary"
-              >
-                Opprett første rom
-              </button>
-            }
-          />
-        ) : (
-          <div className="flex flex-col gap-3">
-            {byRoom.map(({ room, bought, planned, projected }) => {
-              const warning = overPlanSentence({
-                name: room.name,
-                budget: room.budget,
-                projected,
-              })
-              return (
-                <Link key={room.id} to={`/rom/${room.id}`} className="block">
-                  <Card padding="sm">
-                    <p className="font-medium text-sm mb-2">{room.name}</p>
-                    <BudgetQuad
-                      budget={room.budget}
-                      bought={bought}
-                      planned={planned}
-                      compact
-                      framed={false}
-                    />
-                    {warning ? (
-                      <p className="mt-2 text-xs text-destructive">{warning}</p>
-                    ) : room.budget > 0 ? (
-                      <p className="mt-2 text-xs text-muted">
-                        {formatNOK(room.budget - projected)} gjenstår hvis dere kjøper alt planlagt
-                      </p>
-                    ) : projected > 0 ? (
-                      <p className="mt-2 text-xs text-muted">Ingen rombudsjett</p>
-                    ) : null}
-                  </Card>
-                </Link>
-              )
-            })}
-          </div>
-        )}
-      </section>
-
-      <AddRoomSheet open={showAddRoom} onClose={() => setShowAddRoom(false)} />
-
-      <section>
-        <SectionHeader title="Siste kjøp" to="/utgifter" />
-        {recentPurchases.length === 0 ? (
-          <p className="text-sm text-muted">
-            Ingen kjøp ennå.{' '}
-            <button
-              type="button"
-              className="text-primary font-medium"
-              onClick={() => openNew({ status: 'purchased' })}
-            >
-              Registrer første kjøp
-            </button>
-          </p>
-        ) : (
-          <ExpenseList expenses={recentPurchases} />
-        )}
-      </section>
-
-      {plannedExpenses.length > 0 && (
+      {recentPurchases.length > 0 && (
         <section>
-          <SectionHeader title="Planlagte" to="/utgifter" />
-          <ExpenseList expenses={plannedExpenses} />
+          <SectionHeader title="Siste kjøp" to="/utgifter" />
+          <ExpenseList expenses={recentPurchases} />
         </section>
       )}
     </div>

@@ -6,7 +6,7 @@ import { ExpenseList } from '@/components/expense/ExpenseRow'
 import { useExpenses } from '@/hooks/useExpenses'
 import { useRooms } from '@/hooks/useRooms'
 import { useCategories } from '@/hooks/useCategories'
-import { getExpenseTotal } from '@/lib/calc'
+import { getExpenseTotal, isBoughtStatus } from '@/lib/calc'
 import { formatNOK } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import type { Expense } from '@/lib/types'
@@ -18,20 +18,20 @@ export function ExpensesPage() {
   const [search, setSearch] = useState('')
   const [roomFilter, setRoomFilter] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('')
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('')
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('planned')
   const [sortBy, setSortBy] = useState<SortKey>('date')
   const [showFilters, setShowFilters] = useState(false)
 
   const { expenses: allExpenses, isLoading } = useExpenses({
     roomId: roomFilter || undefined,
     categoryId: categoryFilter || undefined,
-    status: statusFilter === 'planned' ? 'planned' : undefined,
     search,
   })
 
   const expenses = useMemo(() => {
-    if (statusFilter !== 'bought') return allExpenses
-    return allExpenses.filter((e) => e.status === 'purchased' || e.status === 'paid')
+    if (statusFilter === 'planned') return allExpenses.filter((e) => !isBoughtStatus(e.status))
+    if (statusFilter === 'bought') return allExpenses.filter((e) => isBoughtStatus(e.status))
+    return allExpenses
   }, [allExpenses, statusFilter])
 
   const { data: rooms } = useRooms()
@@ -85,8 +85,36 @@ export function ExpensesPage() {
     <div className="space-y-4 pb-4">
       <header>
         <h1 className="font-display text-2xl font-bold">Utgifter</h1>
-        <p className="text-sm text-muted">{expenses.length} utgifter</p>
+        <p className="text-sm text-muted">
+          {statusFilter === 'planned'
+            ? `${expenses.length} å kjøpe`
+            : statusFilter === 'bought'
+              ? `${expenses.length} kjøpt`
+              : `${expenses.length} utgifter`}
+        </p>
       </header>
+
+      <div className="flex gap-2">
+        {([
+          { value: 'planned', label: 'Planlagt' },
+          { value: 'bought', label: 'Kjøpt' },
+          { value: '', label: 'Alle' },
+        ] as const).map((opt) => (
+          <button
+            key={opt.value || 'all'}
+            type="button"
+            onClick={() => setStatusFilter(opt.value)}
+            className={cn(
+              'h-9 px-3 rounded-full text-sm font-medium border',
+              statusFilter === opt.value
+                ? 'bg-primary text-white border-primary'
+                : 'bg-white/80 text-muted border-border',
+            )}
+          >
+            {opt.label}
+          </button>
+        ))}
+      </div>
 
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted" />
@@ -148,7 +176,12 @@ export function ExpensesPage() {
       )}
 
       {groups.length === 0 ? (
-        <ExpenseList expenses={[]} emptyMessage="Ingen utgifter funnet" />
+        <ExpenseList
+          expenses={[]}
+          emptyMessage={
+            statusFilter === 'planned' ? 'Ingenting planlagt ennå' : 'Ingen utgifter funnet'
+          }
+        />
       ) : (
         <div className="space-y-6">
           {groups.map((group) => {

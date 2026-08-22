@@ -4,6 +4,7 @@ import { LoadingSpinner } from '@/components/ui/LoadingSpinner'
 import { ExpenseList } from '@/components/expense/ExpenseRow'
 import { BudgetQuad } from '@/components/budget/BudgetQuad'
 import { useSupplier } from '@/hooks/useSuppliers'
+import { isBoughtStatus } from '@/lib/calc'
 
 export function SupplierDetailPage() {
   const { name } = useParams<{ name: string }>()
@@ -21,6 +22,9 @@ export function SupplierDetailPage() {
       </div>
     )
   }
+
+  const toBuy = supplier.expenses.filter((e) => !isBoughtStatus(e.status))
+  const purchased = supplier.expenses.filter((e) => isBoughtStatus(e.status))
 
   return (
     <div className="space-y-4 pb-4">
@@ -51,8 +55,20 @@ export function SupplierDetailPage() {
         }
       />
 
-      <h2 className="font-display font-semibold">Utgifter</h2>
-      <ExpenseList expenses={supplier.expenses} showRoom />
+      <section>
+        <h2 className="font-display font-semibold mb-2">Å kjøpe her</h2>
+        <ExpenseList
+          expenses={toBuy}
+          showRoom
+          emptyMessage={`Ingenting planlagt hos ${supplier.name} ennå`}
+        />
+      </section>
+      {purchased.length > 0 && (
+        <section>
+          <h2 className="font-display font-semibold mb-2">Kjøpt</h2>
+          <ExpenseList expenses={purchased} showRoom />
+        </section>
+      )}
     </div>
   )
 }

@@ -36,7 +36,7 @@ export function useSuppliers() {
         plannedAmount: sumPlannedExpenses(list),
       })
     }
-    return result.sort((a, b) => b.paidAmount - a.paidAmount || b.totalAmount - a.totalAmount)
+    return result.sort((a, b) => b.plannedAmount - a.plannedAmount || b.paidAmount - a.paidAmount)
   }, [expenses])
 
   return { suppliers, data: suppliers, isLoading }

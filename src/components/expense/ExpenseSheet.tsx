@@ -404,9 +404,9 @@ function ExpenseForm({
 
   const roomName = rooms.find((r) => r.id === form.room_id)?.name
   const payerName = memberOptions.find((m) => m.value === form.who_paid)?.label
-  const defaultsHint = [form.supplier.trim() || null, roomName, isBuyLike ? payerName : null]
-    .filter(Boolean)
-    .join(' · ')
+  const defaultsHint = isBuyLike
+    ? [form.supplier.trim() || null, roomName, payerName].filter(Boolean).join(' · ')
+    : [form.supplier.trim() || null].filter(Boolean).join(' · ')
 
   const saveLabel =
     saveState === 'saving' ? 'Lagrer…' : saveState === 'saved' ? 'Lagret' : 'Endringer lagres automatisk'
@@ -434,11 +434,21 @@ function ExpenseForm({
 
       {layout !== 'convert' && (
         <Input
-          label={isBuyLike ? 'Hva' : 'Beskrivelse'}
+          label="Hva"
           value={form.description === 'Uten tittel' ? '' : form.description}
           onChange={(e) => update({ description: e.target.value })}
           placeholder={layout === 'plan' ? 'F.eks. Parkett eik' : 'Hva kjøpte du?'}
           autoFocus={!focusAmount}
+        />
+      )}
+
+      {layout === 'plan' && (
+        <Select
+          label="Rom"
+          value={form.room_id ?? ''}
+          onChange={(e) => update({ room_id: e.target.value || null })}
+          options={roomOptions}
+          placeholder="Velg rom"
         />
       )}
 
@@ -513,13 +523,15 @@ function ExpenseForm({
             />
           )}
 
-          <Select
-            label="Rom"
-            value={form.room_id ?? ''}
-            onChange={(e) => update({ room_id: e.target.value || null })}
-            options={roomOptions}
-            placeholder="Velg rom"
-          />
+          {isBuyLike && (
+            <Select
+              label="Rom"
+              value={form.room_id ?? ''}
+              onChange={(e) => update({ room_id: e.target.value || null })}
+              options={roomOptions}
+              placeholder="Velg rom"
+            />
+          )}
 
           <Select
             label="Kategori"
@@ -566,60 +578,58 @@ function ExpenseForm({
             </button>
           )}
 
-          {isBuyLike && (
-            <>
-              <button
-                type="button"
-                onClick={() => setShowDiscount(!showDiscount)}
-                className="flex items-center gap-2 text-sm text-primary font-medium"
-              >
-                {showDiscount ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                Rabatt
-              </button>
+          <button
+            type="button"
+            onClick={() => setShowDiscount(!showDiscount)}
+            className="flex items-center gap-2 text-sm text-primary font-medium"
+          >
+            {showDiscount ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+            Rabatt
+          </button>
 
-              {showDiscount && (
-                <div className="grid grid-cols-2 gap-3 pl-2 border-l-2 border-primary/20">
-                  <Input
-                    label="Rabatt %"
-                    type="number"
-                    min={0}
-                    max={100}
-                    inputMode="decimal"
-                    value={form.discount_percent ?? ''}
-                    onChange={(e) =>
-                      update({
-                        discount_percent: e.target.value ? parseFloat(e.target.value) : null,
-                        discount_amount: null,
-                      })
-                    }
-                  />
-                  <Input
-                    label="Rabatt kr"
-                    type="number"
-                    min={0}
-                    inputMode="decimal"
-                    value={form.discount_amount ?? ''}
-                    onChange={(e) =>
-                      update({
-                        discount_amount: e.target.value ? parseFloat(e.target.value) : null,
-                        discount_percent: null,
-                      })
-                    }
-                  />
-                </div>
-              )}
-
-              {discount > 0 && (
-                <p className="text-sm text-emerald-700">Rabatt −{formatNOK(discount)}</p>
-              )}
-
+          {showDiscount && (
+            <div className="grid grid-cols-2 gap-3 pl-2 border-l-2 border-primary/20">
               <Input
-                label="Dato"
-                type="date"
-                value={form.expense_date}
-                onChange={(e) => update({ expense_date: e.target.value })}
+                label="Rabatt %"
+                type="number"
+                min={0}
+                max={100}
+                inputMode="decimal"
+                value={form.discount_percent ?? ''}
+                onChange={(e) =>
+                  update({
+                    discount_percent: e.target.value ? parseFloat(e.target.value) : null,
+                    discount_amount: null,
+                  })
+                }
               />
-            </>
+              <Input
+                label="Rabatt kr"
+                type="number"
+                min={0}
+                inputMode="decimal"
+                value={form.discount_amount ?? ''}
+                onChange={(e) =>
+                  update({
+                    discount_amount: e.target.value ? parseFloat(e.target.value) : null,
+                    discount_percent: null,
+                  })
+                }
+              />
+            </div>
+          )}
+
+          {discount > 0 && (
+            <p className="text-sm text-emerald-700">Rabatt −{formatNOK(discount)}</p>
+          )}
+
+          {isBuyLike && (
+            <Input
+              label="Dato"
+              type="date"
+              value={form.expense_date}
+              onChange={(e) => update({ expense_date: e.target.value })}
+            />
           )}
         </div>
       )}

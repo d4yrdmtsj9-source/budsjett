@@ -11,7 +11,7 @@ import { BudgetQuad } from '@/components/budget/BudgetQuad'
 import { useRoom, useRooms } from '@/hooks/useRooms'
 import { useExpenses } from '@/hooks/useExpenses'
 import { useExpenseSheet } from '@/hooks/useExpenseSheet'
-import { overPlanSentence, sumPaidExpenses, sumPlannedExpenses } from '@/lib/calc'
+import { isBoughtStatus, overPlanSentence, sumPaidExpenses, sumPlannedExpenses } from '@/lib/calc'
 
 export function RoomDetailPage() {
   const { roomId } = useParams<{ roomId: string }>()
@@ -26,6 +26,8 @@ export function RoomDetailPage() {
   const [saving, setSaving] = useState(false)
 
   const roomExpenses = expenses.filter((e) => e.room_id === roomId)
+  const toBuy = roomExpenses.filter((e) => !isBoughtStatus(e.status))
+  const purchased = roomExpenses.filter((e) => isBoughtStatus(e.status))
   const planned = sumPlannedExpenses(roomExpenses)
   const bought = sumPaidExpenses(roomExpenses)
   const projected = bought + planned
@@ -82,7 +84,13 @@ export function RoomDetailPage() {
         <div className="flex items-start justify-between">
           <div>
             <h1 className="font-display text-2xl font-bold">{room.name}</h1>
-            <p className="text-sm text-muted">{roomExpenses.length} utgifter</p>
+            <p className="text-sm text-muted">
+              {toBuy.length > 0
+                ? `${toBuy.length} å kjøpe`
+                : purchased.length > 0
+                  ? `${purchased.length} kjøpt`
+                  : 'Ingenting planlagt ennå'}
+            </p>
           </div>
           <Button variant="ghost" size="icon" onClick={openEditSheet}>
             <Pencil className="h-4 w-4" />
@@ -103,30 +111,43 @@ export function RoomDetailPage() {
         }
       />
 
-      <div className="flex justify-between items-center gap-2">
-        <h2 className="font-display font-semibold">Utgifter</h2>
-        <div className="flex gap-2">
-          <Button
-            size="sm"
-            variant="secondary"
-            onClick={() => openNew({ roomId, status: 'planned' })}
-          >
-            Planlegg
-          </Button>
-          <Button
-            size="sm"
-            onClick={() => openNew({ roomId, status: 'purchased' })}
-          >
-            Kjøp
-          </Button>
-        </div>
+      <div className="flex justify-end gap-2">
+        <Button
+          size="sm"
+          variant="secondary"
+          onClick={() => openNew({ roomId, status: 'purchased' })}
+        >
+          Kjøp
+        </Button>
+        <Button size="sm" onClick={() => openNew({ roomId, status: 'planned' })}>
+          Planlegg
+        </Button>
       </div>
 
-      <ExpenseList
-        expenses={roomExpenses}
-        showRoom={false}
-        emptyMessage="Ingen utgifter i dette rommet"
-      />
+      <section>
+        <h2 className="font-display font-semibold mb-2">Å kjøpe</h2>
+        <ExpenseList
+          expenses={toBuy}
+          showRoom={false}
+          emptyMessage={`Ingenting planlagt i ${room.name.toLowerCase()} ennå`}
+        />
+        {toBuy.length === 0 && (
+          <button
+            type="button"
+            className="block mx-auto text-sm font-medium text-primary -mt-4 mb-2"
+            onClick={() => openNew({ roomId, status: 'planned' })}
+          >
+            Planlegg første ting i {room.name.toLowerCase()}
+          </button>
+        )}
+      </section>
+
+      {purchased.length > 0 && (
+        <section>
+          <h2 className="font-display font-semibold mb-2">Kjøpt</h2>
+          <ExpenseList expenses={purchased} showRoom={false} />
+        </section>
+      )}
 
       <Sheet open={showEdit} onClose={() => setShowEdit(false)} title="Rediger rom">
         <form onSubmit={handleUpdate} className="space-y-4 pb-6">
