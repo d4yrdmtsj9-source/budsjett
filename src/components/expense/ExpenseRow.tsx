@@ -37,7 +37,9 @@ export function ExpenseRow({ expense, showRoom = true, showCategory = true }: Ex
         <button type="button" onClick={() => openEdit(expense)} className="flex-1 text-left min-w-0">
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
-              <p className="font-medium text-sm truncate">{expense.description}</p>
+              <p className="font-medium text-sm whitespace-pre-wrap line-clamp-4">
+                {expense.description}
+              </p>
               <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-0.5">
                 {canPurchase && expense.quantity > 0 && (
                   <span className="text-xs text-muted">

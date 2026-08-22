@@ -6,6 +6,8 @@ import { Input } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
 import { Button } from '@/components/ui/Button'
 import { MoneyInput } from '@/components/ui/MoneyInput'
+import { SuggestInput } from '@/components/ui/SuggestInput'
+import { uniqueSuggestions, normalizeSuggest, firstLine } from '@/lib/suggest'
 import { useExpenseSheet, type ExpenseSheetMode } from '@/hooks/useExpenseSheet'
 import { useExpenses } from '@/hooks/useExpenses'
 import { useRooms } from '@/hooks/useRooms'
@@ -136,12 +138,11 @@ export function ExpenseSheet() {
   } = useExpenseSheet()
   const { createExpense, updateExpense, expenses } = useExpenses()
   const { data: rooms } = useRooms()
-  const { data: categories } = useCategories()
+  const { data: categories, createCategory } = useCategories()
   const { members, project } = useProject()
   const { memberId } = useAuth()
 
   const roomOptions = (rooms ?? []).map((r) => ({ value: r.id, label: r.name }))
-  const categoryOptions = (categories ?? []).map((c) => ({ value: c.id, label: c.name }))
   const memberOptions = members.map((m) => ({
     value: m.id,
     label: m.profile?.display_name ?? m.display_name ?? 'Medlem',
@@ -225,11 +226,12 @@ export function ExpenseSheet() {
           focusAmount={isBuyLike && focusField === 'unit_price'}
           plannedSummary={plannedSummary}
           roomOptions={roomOptions}
-          categoryOptions={categoryOptions}
           memberOptions={memberOptions}
           rooms={rooms ?? []}
+          categories={categories ?? []}
           expenses={expenses}
           projectBudget={project?.total_budget ?? 0}
+          createCategory={(name) => createCategory.mutateAsync({ name, budget: 0 })}
           onCreated={(expense) => setEditingExpense(toExpenseView(expense))}
           onClose={close}
           registerCloseHandler={(fn) => {
@@ -250,9 +252,9 @@ function ExpenseForm({
   focusAmount,
   plannedSummary,
   roomOptions,
-  categoryOptions,
   memberOptions,
   rooms,
+  categories,
   expenses,
   projectBudget,
   onCreated,
@@ -260,6 +262,7 @@ function ExpenseForm({
   registerCloseHandler,
   createExpense,
   updateExpense,
+  createCategory,
 }: {
   initial: ExpenseFormData
   expenseId: string | null
@@ -271,9 +274,9 @@ function ExpenseForm({
     qtyHint: string | null
   } | null
   roomOptions: { value: string; label: string }[]
-  categoryOptions: { value: string; label: string }[]
   memberOptions: { value: string; label: string }[]
   rooms: { id: string; name: string; budget: number }[]
+  categories: { id: string; name: string }[]
   expenses: Expense[]
   projectBudget: number
   onCreated: (expense: LocalExpense) => void
@@ -285,6 +288,7 @@ function ExpenseForm({
     form: ExpenseFormData
     quiet?: boolean
   }) => Promise<unknown>
+  createCategory: (name: string) => Promise<{ id: string }>
 }) {
   const lockedStatus: ExpenseStatus = layout === 'plan' ? 'planned' : 'purchased'
   const isBuyLike = layout === 'buy' || layout === 'convert'
@@ -303,9 +307,14 @@ function ExpenseForm({
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const creatingRef = useRef(false)
   const amountRef = useRef<HTMLInputElement>(null)
+  const initialCategoryName =
+    categories.find((c) => c.id === initial.category_id)?.name ?? ''
+  const [categoryDraft, setCategoryDraft] = useState(initialCategoryName)
+  const categoryDraftRef = useRef(categoryDraft)
 
   formRef.current = form
   savedIdRef.current = savedId
+  categoryDraftRef.current = categoryDraft
 
   useEffect(() => {
     if (focusAmount) amountRef.current?.focus()
@@ -319,6 +328,13 @@ function ExpenseForm({
     if (!isMeaningful(locked)) return id
     setSaveState('saving')
     try {
+      const categoryName = categoryDraftRef.current.trim()
+      if (categoryName && !locked.category_id) {
+        const cat = await createCategory(categoryName)
+        locked.category_id = cat.id
+        formRef.current = { ...formRef.current, category_id: cat.id }
+        setForm((f) => ({ ...f, category_id: cat.id }))
+      }
       if (!id) {
         if (creatingRef.current) return id
         creatingRef.current = true
@@ -406,7 +422,21 @@ function ExpenseForm({
   const payerName = memberOptions.find((m) => m.value === form.who_paid)?.label
   const defaultsHint = isBuyLike
     ? [form.supplier.trim() || null, roomName, payerName].filter(Boolean).join(' · ')
-    : [form.supplier.trim() || null].filter(Boolean).join(' · ')
+    : ''
+
+  const descriptionSuggestions = uniqueSuggestions(
+    expenses.map((e) =>
+      e.description === 'Uten tittel' ? '' : firstLine(e.description),
+    ),
+  )
+  const shopSuggestions = uniqueSuggestions(expenses.map((e) => e.supplier))
+  const categorySuggestions = uniqueSuggestions(categories.map((c) => c.name))
+
+  const setCategoryFromName = (name: string) => {
+    setCategoryDraft(name)
+    const match = categories.find((c) => normalizeSuggest(c.name) === normalizeSuggest(name))
+    update({ category_id: match?.id ?? null })
+  }
 
   const saveLabel =
     saveState === 'saving' ? 'Lagrer…' : saveState === 'saved' ? 'Lagret' : 'Endringer lagres automatisk'
@@ -424,7 +454,7 @@ function ExpenseForm({
       {layout === 'convert' && plannedSummary && (
         <div className="rounded-xl border border-border bg-white/70 px-4 py-3">
           <p className="text-xs text-muted uppercase tracking-wide">Fra plan</p>
-          <p className="font-medium mt-0.5">{plannedSummary.description}</p>
+          <p className="font-medium mt-0.5 whitespace-pre-wrap">{plannedSummary.description}</p>
           <p className="text-sm text-muted mt-1">
             {plannedSummary.qtyHint ? `${plannedSummary.qtyHint} · ` : ''}
             Estimat {formatNOK(plannedSummary.estimate)}
@@ -433,12 +463,18 @@ function ExpenseForm({
       )}
 
       {layout !== 'convert' && (
-        <Input
-          label="Hva"
+        <SuggestInput
+          label={layout === 'plan' ? 'Beskrivelse' : 'Hva'}
           value={form.description === 'Uten tittel' ? '' : form.description}
-          onChange={(e) => update({ description: e.target.value })}
-          placeholder={layout === 'plan' ? 'F.eks. Parkett eik' : 'Hva kjøpte du?'}
+          onChange={(description) => update({ description })}
+          suggestions={descriptionSuggestions}
+          placeholder={
+            layout === 'plan'
+              ? 'Hva skal kjøpes, merke, mål, farge — så mye dere trenger'
+              : 'Hva kjøpte du?'
+          }
           autoFocus={!focusAmount}
+          multiline={layout === 'plan'}
         />
       )}
 
@@ -487,6 +523,25 @@ function ExpenseForm({
 
       {afford && <p className="text-sm text-muted">{afford}</p>}
 
+      {layout === 'plan' && (
+        <div className="space-y-4">
+          <SuggestInput
+            label="Butikk"
+            value={form.supplier}
+            onChange={(supplier) => update({ supplier })}
+            suggestions={shopSuggestions}
+            placeholder="F.eks. Byggmakker"
+          />
+          <SuggestInput
+            label="Kategori"
+            value={categoryDraft}
+            onChange={setCategoryFromName}
+            suggestions={categorySuggestions}
+            placeholder="F.eks. Materialer"
+          />
+        </div>
+      )}
+
       {defaultsHint && (
         <p className="text-xs text-muted">{defaultsHint}</p>
       )}
@@ -495,6 +550,7 @@ function ExpenseForm({
         Ferdig
       </Button>
 
+      {isBuyLike && (
       <button
         type="button"
         onClick={() => setShowMore((v) => !v)}
@@ -503,49 +559,43 @@ function ExpenseForm({
         {showMore ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
         Mer
       </button>
+      )}
 
-      {showMore && (
+      {isBuyLike && showMore && (
         <div className="space-y-4 pt-1">
-          <Input
+          <SuggestInput
             label="Butikk"
             value={form.supplier}
-            onChange={(e) => update({ supplier: e.target.value })}
+            onChange={(supplier) => update({ supplier })}
+            suggestions={shopSuggestions}
             placeholder="F.eks. Byggmakker"
           />
 
-          {isBuyLike && (
-            <Select
-              label="Betalt av"
-              value={form.who_paid}
-              onChange={(e) => update({ who_paid: e.target.value })}
-              options={memberOptions}
-              placeholder="Velg person"
-            />
-          )}
-
-          {isBuyLike && (
-            <Select
-              label="Rom"
-              value={form.room_id ?? ''}
-              onChange={(e) => update({ room_id: e.target.value || null })}
-              options={roomOptions}
-              placeholder="Velg rom"
-            />
-          )}
-
           <Select
-            label="Kategori"
-            value={form.category_id ?? ''}
-            onChange={(e) => update({ category_id: e.target.value || null })}
-            options={categoryOptions}
-            placeholder="Valgfritt"
+            label="Betalt av"
+            value={form.who_paid}
+            onChange={(e) => update({ who_paid: e.target.value })}
+            options={memberOptions}
+            placeholder="Velg person"
           />
 
-          <InlineNewCategory onCreated={(id) => update({ category_id: id })} />
+          <Select
+            label="Rom"
+            value={form.room_id ?? ''}
+            onChange={(e) => update({ room_id: e.target.value || null })}
+            options={roomOptions}
+            placeholder="Velg rom"
+          />
 
-          {isBuyLike && (
-            <QtyPriceFields form={form} priceLabel="Pris/enhet" onUpdate={update} />
-          )}
+          <SuggestInput
+            label="Kategori"
+            value={categoryDraft}
+            onChange={setCategoryFromName}
+            suggestions={categorySuggestions}
+            placeholder="F.eks. Materialer"
+          />
+
+          <QtyPriceFields form={form} priceLabel="Pris/enhet" onUpdate={update} />
 
           {layout === 'buy' && (
             <button
@@ -634,74 +684,5 @@ function ExpenseForm({
         </div>
       )}
     </form>
-  )
-}
-
-function InlineNewCategory({ onCreated }: { onCreated: (id: string) => void }) {
-  const { createCategory } = useCategories()
-  const [open, setOpen] = useState(false)
-  const [name, setName] = useState('')
-  const [saving, setSaving] = useState(false)
-
-  if (!open) {
-    return (
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="text-sm text-primary font-medium"
-      >
-        + Ny kategori
-      </button>
-    )
-  }
-
-  return (
-    <div className="rounded-xl border border-border bg-white/70 p-3 space-y-3">
-      <Input
-        label="Ny kategori"
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        placeholder="F.eks. Materialer"
-      />
-      <div className="flex gap-2">
-        <Button
-          type="button"
-          variant="secondary"
-          size="sm"
-          className="flex-1"
-          onClick={() => {
-            setOpen(false)
-            setName('')
-          }}
-        >
-          Avbryt
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          className="flex-1"
-          disabled={saving || !name.trim()}
-          onClick={async () => {
-            setSaving(true)
-            try {
-              const cat = await createCategory.mutateAsync({
-                name: name.trim(),
-                budget: 0,
-              })
-              onCreated(cat.id)
-              toast.success('Kategori lagt til')
-              setOpen(false)
-              setName('')
-            } catch (err) {
-              toast.error(err instanceof Error ? err.message : 'Kunne ikke legge til')
-            } finally {
-              setSaving(false)
-            }
-          }}
-        >
-          {saving ? 'Lagrer...' : 'Lagre'}
-        </Button>
-      </div>
-    </div>
   )
 }
