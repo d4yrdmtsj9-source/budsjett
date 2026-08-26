@@ -108,6 +108,15 @@ export function overPlanSentence(opts: {
   return `${name} er ${pct} % over hvis vi kjøper alt planlagt`
 }
 
+/** Convert-sheet copy: how the actual amount sits versus the plan estimate. */
+export function estimateDeltaSentence(estimate: number, actual: number): string | null {
+  if (estimate <= 0 || actual <= 0) return null
+  const delta = Math.round(actual) - Math.round(estimate)
+  if (delta === 0) return 'Som estimert'
+  if (delta > 0) return `${formatNOKPlain(delta)} over estimat`
+  return `${formatNOKPlain(-delta)} under estimat`
+}
+
 function formatNOKPlain(amount: number): string {
   return new Intl.NumberFormat('nb-NO', {
     maximumFractionDigits: 0,

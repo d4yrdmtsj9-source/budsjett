@@ -129,6 +129,7 @@ export function RoomDetailPage() {
         <ExpenseList
           expenses={toBuy}
           showRoom={false}
+          showStatus={false}
           emptyMessage={`Ingenting planlagt i ${room.name.toLowerCase()} ennå`}
         />
         {toBuy.length === 0 && (

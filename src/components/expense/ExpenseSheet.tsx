@@ -25,6 +25,7 @@ import {
   sumPlannedExpenses,
   budgetRemaining,
   affordSentence,
+  estimateDeltaSentence,
 } from '@/lib/calc'
 import { formatNOK } from '@/lib/format'
 import { DEFAULT_UNITS, type Expense, type ExpenseFormData, type ExpenseStatus } from '@/lib/types'
@@ -79,6 +80,26 @@ function resolveLayout(
     return editing.status === 'purchased' || editing.status === 'paid' ? 'buy' : 'plan'
   }
   return defaultStatus === 'purchased' ? 'buy' : 'plan'
+}
+
+function nextPlanLine(from: ExpenseFormData): ExpenseFormData {
+  return {
+    ...defaultExpenseForm(),
+    room_id: from.room_id,
+    supplier: from.supplier,
+    category_id: from.category_id,
+    quantity: 1,
+    unit: 'stk',
+    unit_price: 0,
+    total_override: null,
+    discount_percent: null,
+    discount_amount: null,
+    notes: '',
+    description: '',
+    status: 'planned',
+    who_paid: '',
+    expense_date: new Date().toISOString().split('T')[0],
+  }
 }
 
 function QtyPriceFields({
@@ -209,7 +230,9 @@ export function ExpenseSheet() {
           description: editingExpense.description,
           estimate: getExpenseTotal(editingExpense),
           qtyHint:
-            editingExpense.quantity > 0
+            editingExpense.quantity > 0 &&
+            (editingExpense.quantity !== 1 ||
+              (!!editingExpense.unit && editingExpense.unit !== 'stk'))
               ? `${editingExpense.quantity} ${editingExpense.unit || 'stk'}`
               : null,
         }
@@ -298,6 +321,10 @@ function ExpenseForm({
   })
   const [savedId, setSavedId] = useState<string | null>(expenseId)
   const [showMore, setShowMore] = useState(false)
+  const [showQty, setShowQty] = useState(
+    initial.quantity !== 1 || (!!initial.unit && initial.unit !== 'stk'),
+  )
+  const [lineKey, setLineKey] = useState(0)
   const [showDiscount, setShowDiscount] = useState(
     !!(initial.discount_percent || initial.discount_amount),
   )
@@ -305,7 +332,7 @@ function ExpenseForm({
   const formRef = useRef(form)
   const savedIdRef = useRef(savedId)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const creatingRef = useRef(false)
+  const persistTail = useRef(Promise.resolve(true))
   const amountRef = useRef<HTMLInputElement>(null)
   const initialCategoryName =
     categories.find((c) => c.id === initial.category_id)?.name ?? ''
@@ -320,12 +347,12 @@ function ExpenseForm({
     if (focusAmount) amountRef.current?.focus()
   }, [focusAmount])
 
-  const persist = async (nextForm: ExpenseFormData, id: string | null) => {
+  const persistOnce = async (nextForm: ExpenseFormData, id: string | null): Promise<boolean> => {
     const locked: ExpenseFormData = {
       ...nextForm,
       status: lockedStatus,
     }
-    if (!isMeaningful(locked)) return id
+    if (!isMeaningful(locked)) return true
     setSaveState('saving')
     try {
       const categoryName = categoryDraftRef.current.trim()
@@ -336,26 +363,32 @@ function ExpenseForm({
         setForm((f) => ({ ...f, category_id: cat.id }))
       }
       if (!id) {
-        if (creatingRef.current) return id
-        creatingRef.current = true
         const created = await createExpense(locked)
-        creatingRef.current = false
         setSavedId(created.id)
+        savedIdRef.current = created.id
         onCreated(created)
         savePrefs(locked)
         setSaveState('saved')
-        return created.id
+        return true
       }
       await updateExpense({ id, form: locked, quiet: true })
       savePrefs(locked)
       setSaveState('saved')
-      return id
+      return true
     } catch (err) {
-      creatingRef.current = false
       setSaveState('idle')
       toast.error(err instanceof Error ? err.message : 'Kunne ikke lagre')
-      return id
+      return false
     }
+  }
+
+  const persist = (nextForm: ExpenseFormData, id: string | null) => {
+    const run = persistTail.current.then(() => persistOnce(nextForm, savedIdRef.current ?? id))
+    persistTail.current = run.then(
+      () => true,
+      () => true,
+    )
+    return run
   }
 
   const scheduleSave = (nextForm: ExpenseFormData) => {
@@ -379,16 +412,41 @@ function ExpenseForm({
     setSaveState((s) => (s === 'saved' ? 'idle' : s))
   }
 
-  const flushAndClose = async () => {
+  const flushPending = () => {
     if (timerRef.current) {
       clearTimeout(timerRef.current)
       timerRef.current = null
     }
+  }
+
+  const flushAndClose = async () => {
+    flushPending()
     const current = formRef.current
     if (isMeaningful(current)) {
       await persist(current, savedIdRef.current)
     }
     onClose()
+  }
+
+  const saveThenNext = async () => {
+    flushPending()
+    const current = formRef.current
+    if (!isMeaningful(current)) {
+      toast.error('Skriv hva som skal kjøpes')
+      return
+    }
+    const ok = await persist(current, savedIdRef.current)
+    if (!ok) return
+    const kept = formRef.current
+    const next = nextPlanLine(kept)
+    formRef.current = next
+    savedIdRef.current = null
+    setForm(next)
+    setSavedId(null)
+    setShowQty(false)
+    setShowDiscount(false)
+    setSaveState('idle')
+    setLineKey((k) => k + 1)
   }
 
   useEffect(() => {
@@ -417,6 +475,10 @@ function ExpenseForm({
   const scopeName = room?.name.toLowerCase() ?? 'prosjektet'
   const afford =
     scopeBudget > 0 ? affordSentence({ amount: total, remaining, scope: scopeName }) : null
+  const convertDelta =
+    layout === 'convert' && plannedSummary
+      ? estimateDeltaSentence(plannedSummary.estimate, total)
+      : null
 
   const roomName = rooms.find((r) => r.id === form.room_id)?.name
   const payerName = memberOptions.find((m) => m.value === form.who_paid)?.label
@@ -445,7 +507,8 @@ function ExpenseForm({
     <form
       onSubmit={(e) => {
         e.preventDefault()
-        void flushAndClose()
+        if (layout === 'plan') void saveThenNext()
+        else void flushAndClose()
       }}
       className="space-y-4 pb-16"
     >
@@ -457,13 +520,16 @@ function ExpenseForm({
           <p className="font-medium mt-0.5 whitespace-pre-wrap">{plannedSummary.description}</p>
           <p className="text-sm text-muted mt-1">
             {plannedSummary.qtyHint ? `${plannedSummary.qtyHint} · ` : ''}
-            Estimat {formatNOK(plannedSummary.estimate)}
+            {plannedSummary.estimate > 0
+              ? `Estimat ${formatNOK(plannedSummary.estimate)}`
+              : 'Mangler estimat'}
           </p>
         </div>
       )}
 
       {layout !== 'convert' && (
         <SuggestInput
+          key={`desc-${lineKey}`}
           label={layout === 'plan' ? 'Beskrivelse' : 'Hva'}
           value={form.description === 'Uten tittel' ? '' : form.description}
           onChange={(description) => update({ description })}
@@ -504,22 +570,61 @@ function ExpenseForm({
           }
         />
       ) : (
-        <QtyPriceFields form={form} priceLabel="Pris/enhet" onUpdate={update} />
+        <>
+          <MoneyInput
+            key={`estimate-${lineKey}`}
+            label="Estimat"
+            value={total}
+            onChange={(amount) => {
+              const qty = form.quantity > 0 ? form.quantity : 1
+              update({
+                quantity: qty,
+                unit: form.unit || 'stk',
+                unit_price: qty > 0 ? amount / qty : amount,
+                total_override: null,
+              })
+            }}
+          />
+          {showQty ? (
+            <div className="grid grid-cols-2 gap-3">
+              <Input
+                label="Antall"
+                type="number"
+                min={0}
+                step="any"
+                inputMode="decimal"
+                value={form.quantity || ''}
+                onChange={(e) => {
+                  const qty = parseFloat(e.target.value)
+                  if (!Number.isFinite(qty) || qty <= 0) return
+                  const currentTotal = calculateTotal(form)
+                  update({
+                    quantity: qty,
+                    unit_price: currentTotal / qty,
+                    total_override: null,
+                  })
+                }}
+              />
+              <Select
+                label="Enhet"
+                value={form.unit}
+                onChange={(e) => update({ unit: e.target.value })}
+                options={DEFAULT_UNITS.map((u) => ({ value: u, label: u }))}
+              />
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setShowQty(true)}
+              className="text-sm text-primary font-medium"
+            >
+              Antall
+            </button>
+          )}
+        </>
       )}
 
-      {layout === 'plan' && (
-        <div className="rounded-xl bg-primary/5 border border-primary/10 p-4">
-          <div className="flex justify-between text-sm text-muted mb-1">
-            <span>
-              {form.quantity || 0} {form.unit || 'stk'} × {formatNOK(form.unit_price || 0)}
-            </span>
-          </div>
-          <div className="flex justify-between font-display text-lg font-semibold">
-            <span>Estimat</span>
-            <span className="text-primary">{formatNOK(total)}</span>
-          </div>
-        </div>
-      )}
+      {convertDelta && <p className="text-sm text-muted -mt-2">{convertDelta}</p>}
 
       {afford && <p className="text-sm text-muted">{afford}</p>}
 
@@ -546,9 +651,26 @@ function ExpenseForm({
         <p className="text-xs text-muted">{defaultsHint}</p>
       )}
 
-      <Button type="submit" size="lg" className="w-full">
-        Ferdig
-      </Button>
+      {layout === 'plan' ? (
+        <div className="flex flex-col gap-2">
+          <Button type="submit" size="lg" className="w-full">
+            {roomName ? `Én til i ${roomName.toLowerCase()}` : 'Én til'}
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="lg"
+            className="w-full"
+            onClick={() => void flushAndClose()}
+          >
+            Ferdig for nå
+          </Button>
+        </div>
+      ) : (
+        <Button type="submit" size="lg" className="w-full">
+          Ferdig
+        </Button>
+      )}
 
       {isBuyLike && (
       <button

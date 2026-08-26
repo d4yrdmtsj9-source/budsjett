@@ -15,9 +15,15 @@ interface ExpenseRowProps {
   expense: Expense
   showRoom?: boolean
   showCategory?: boolean
+  showStatus?: boolean
 }
 
-export function ExpenseRow({ expense, showRoom = true, showCategory = true }: ExpenseRowProps) {
+export function ExpenseRow({
+  expense,
+  showRoom = true,
+  showCategory = true,
+  showStatus = true,
+}: ExpenseRowProps) {
   const { openEdit, openPurchase } = useExpenseSheet()
   const { softDeleteExpense, duplicateExpense, setExpenseStatus } = useExpenses()
   const { members } = useProject()
@@ -27,6 +33,10 @@ export function ExpenseRow({ expense, showRoom = true, showCategory = true }: Ex
   const canPurchase =
     expense.status === 'planned' || expense.status === 'quoted' || expense.status === 'ordered'
   const isPurchase = expense.status === 'purchased' || expense.status === 'paid'
+  const showQtyHint =
+    canPurchase &&
+    expense.quantity > 0 &&
+    (expense.quantity !== 1 || (expense.unit && expense.unit !== 'stk'))
   const paidBy = members.find((m) => m.id === expense.who_paid)
   const paidByName =
     paidBy?.profile?.display_name ?? paidBy?.display_name ?? null
@@ -41,14 +51,14 @@ export function ExpenseRow({ expense, showRoom = true, showCategory = true }: Ex
                 {expense.description}
               </p>
               <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-0.5">
-                {canPurchase && expense.quantity > 0 && (
+                {showQtyHint && (
                   <span className="text-xs text-muted">
                     {expense.quantity} {expense.unit || 'stk'}
                   </span>
                 )}
                 {showRoom && expense.room && (
                   <span className="text-xs text-muted">
-                    {canPurchase && expense.quantity > 0 ? '· ' : ''}
+                    {showQtyHint ? '· ' : ''}
                     {expense.room.name}
                   </span>
                 )}
@@ -65,12 +75,16 @@ export function ExpenseRow({ expense, showRoom = true, showCategory = true }: Ex
             </div>
             <div className="text-right shrink-0">
               {canPurchase ? (
-                <>
-                  <p className="text-[10px] uppercase tracking-wide text-muted">Estimat</p>
-                  <p className="font-display font-semibold text-sm text-muted">
-                    {total > 0 ? formatNOK(total) : '—'}
-                  </p>
-                </>
+                total > 0 ? (
+                  <>
+                    <p className="text-[10px] uppercase tracking-wide text-muted">Estimat</p>
+                    <p className="font-display font-semibold text-sm text-muted">
+                      {formatNOK(total)}
+                    </p>
+                  </>
+                ) : (
+                  <p className="text-xs font-medium text-muted">Mangler estimat</p>
+                )
               ) : (
                 <p className="font-display font-semibold text-sm">{formatNOK(total)}</p>
               )}
@@ -79,9 +93,11 @@ export function ExpenseRow({ expense, showRoom = true, showCategory = true }: Ex
               )}
             </div>
           </div>
-          <div className="mt-2">
-            <StatusBadge status={expense.status} />
-          </div>
+          {showStatus && (
+            <div className="mt-2">
+              <StatusBadge status={expense.status} />
+            </div>
+          )}
         </button>
 
         <div className="flex flex-col items-end gap-1 shrink-0">
@@ -212,11 +228,13 @@ export function ExpenseList({
   expenses,
   showRoom = true,
   showCategory = true,
+  showStatus = true,
   emptyMessage = 'Ingen utgifter ennå',
 }: {
   expenses: Expense[]
   showRoom?: boolean
   showCategory?: boolean
+  showStatus?: boolean
   emptyMessage?: string
 }) {
   if (expenses.length === 0) {
@@ -231,6 +249,7 @@ export function ExpenseList({
           expense={expense}
           showRoom={showRoom}
           showCategory={showCategory}
+          showStatus={showStatus}
         />
       ))}
     </div>

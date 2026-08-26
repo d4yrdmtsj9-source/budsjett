@@ -195,7 +195,7 @@ export function DashboardPage() {
                 ) : (
                   <p className="font-display font-semibold text-sm mb-2">{group.title}</p>
                 )}
-                <ExpenseList expenses={group.items} showRoom={false} />
+                <ExpenseList expenses={group.items} showRoom={false} showStatus={false} />
               </div>
             ))}
           </div>
@@ -230,43 +230,41 @@ export function DashboardPage() {
             }
           />
         ) : (
-          <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-2">
             {byRoom.map(({ room, bought, planned, projected }) => {
+              const remaining = room.budget - projected
               const warning = overPlanSentence({
                 name: room.name,
                 budget: room.budget,
                 projected,
               })
+              const detail = warning
+                ? warning
+                : room.budget > 0
+                  ? `${formatNOK(remaining)} gjenstår`
+                  : planned === 0 && bought === 0
+                    ? 'Planlegg første ting her'
+                    : bought > 0
+                      ? `${formatNOK(bought)} kjøpt`
+                      : null
               return (
                 <Link key={room.id} to={`/rom/${room.id}`} className="block">
                   <Card padding="sm">
-                    <div className="flex items-start justify-between gap-3 mb-2">
-                      <p className="font-medium text-sm">{room.name}</p>
-                      <div className="text-right shrink-0">
-                        <p className="text-[10px] uppercase tracking-wide text-muted">Planlagt</p>
-                        <p className="font-display font-semibold text-sm">
-                          {planned > 0 ? formatNOK(planned) : '—'}
-                        </p>
-                      </div>
-                    </div>
-                    <BudgetQuad
-                      budget={room.budget}
-                      bought={bought}
-                      planned={planned}
-                      compact
-                      framed={false}
-                    />
-                    {warning ? (
-                      <p className="mt-2 text-xs text-destructive">{warning}</p>
-                    ) : room.budget > 0 ? (
-                      <p className="mt-2 text-xs text-muted">
-                        {formatNOK(room.budget - projected)} gjenstår hvis dere kjøper alt planlagt
+                    <div className="flex items-baseline justify-between gap-3">
+                      <p className="font-medium text-sm min-w-0 truncate">{room.name}</p>
+                      <p className="font-display font-semibold text-sm tabular-nums shrink-0">
+                        {planned > 0 ? formatNOK(planned) : '—'}
                       </p>
-                    ) : planned === 0 && bought === 0 ? (
-                      <p className="mt-2 text-xs text-muted">Planlegg første ting her</p>
-                    ) : bought > 0 ? (
-                      <p className="mt-2 text-xs text-muted">{formatNOK(bought)} kjøpt</p>
-                    ) : null}
+                    </div>
+                    {detail && (
+                      <p
+                        className={
+                          warning ? 'mt-0.5 text-xs text-destructive' : 'mt-0.5 text-xs text-muted'
+                        }
+                      >
+                        {detail}
+                      </p>
+                    )}
                   </Card>
                 </Link>
               )
