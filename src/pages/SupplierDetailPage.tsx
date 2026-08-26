@@ -60,6 +60,7 @@ export function SupplierDetailPage() {
         <ExpenseList
           expenses={toBuy}
           showRoom
+          showStatus={false}
           emptyMessage={`Ingenting planlagt hos ${supplier.name} ennå`}
         />
       </section>

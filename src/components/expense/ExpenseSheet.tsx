@@ -6,6 +6,8 @@ import { Input } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
 import { Button } from '@/components/ui/Button'
 import { MoneyInput } from '@/components/ui/MoneyInput'
+import { SuggestInput } from '@/components/ui/SuggestInput'
+import { uniqueSuggestions, normalizeSuggest, firstLine } from '@/lib/suggest'
 import { useExpenseSheet, type ExpenseSheetMode } from '@/hooks/useExpenseSheet'
 import { useExpenses } from '@/hooks/useExpenses'
 import { useRooms } from '@/hooks/useRooms'
@@ -23,6 +25,7 @@ import {
   sumPlannedExpenses,
   budgetRemaining,
   affordSentence,
+  estimateDeltaSentence,
 } from '@/lib/calc'
 import { formatNOK } from '@/lib/format'
 import { DEFAULT_UNITS, type Expense, type ExpenseFormData, type ExpenseStatus } from '@/lib/types'
@@ -77,6 +80,26 @@ function resolveLayout(
     return editing.status === 'purchased' || editing.status === 'paid' ? 'buy' : 'plan'
   }
   return defaultStatus === 'purchased' ? 'buy' : 'plan'
+}
+
+function nextPlanLine(from: ExpenseFormData): ExpenseFormData {
+  return {
+    ...defaultExpenseForm(),
+    room_id: from.room_id,
+    supplier: from.supplier,
+    category_id: from.category_id,
+    quantity: 1,
+    unit: 'stk',
+    unit_price: 0,
+    total_override: null,
+    discount_percent: null,
+    discount_amount: null,
+    notes: '',
+    description: '',
+    status: 'planned',
+    who_paid: '',
+    expense_date: new Date().toISOString().split('T')[0],
+  }
 }
 
 function QtyPriceFields({
@@ -136,12 +159,11 @@ export function ExpenseSheet() {
   } = useExpenseSheet()
   const { createExpense, updateExpense, expenses } = useExpenses()
   const { data: rooms } = useRooms()
-  const { data: categories } = useCategories()
+  const { data: categories, createCategory } = useCategories()
   const { members, project } = useProject()
   const { memberId } = useAuth()
 
   const roomOptions = (rooms ?? []).map((r) => ({ value: r.id, label: r.name }))
-  const categoryOptions = (categories ?? []).map((c) => ({ value: c.id, label: c.name }))
   const memberOptions = members.map((m) => ({
     value: m.id,
     label: m.profile?.display_name ?? m.display_name ?? 'Medlem',
@@ -208,7 +230,9 @@ export function ExpenseSheet() {
           description: editingExpense.description,
           estimate: getExpenseTotal(editingExpense),
           qtyHint:
-            editingExpense.quantity > 0
+            editingExpense.quantity > 0 &&
+            (editingExpense.quantity !== 1 ||
+              (!!editingExpense.unit && editingExpense.unit !== 'stk'))
               ? `${editingExpense.quantity} ${editingExpense.unit || 'stk'}`
               : null,
         }
@@ -225,11 +249,12 @@ export function ExpenseSheet() {
           focusAmount={isBuyLike && focusField === 'unit_price'}
           plannedSummary={plannedSummary}
           roomOptions={roomOptions}
-          categoryOptions={categoryOptions}
           memberOptions={memberOptions}
           rooms={rooms ?? []}
+          categories={categories ?? []}
           expenses={expenses}
           projectBudget={project?.total_budget ?? 0}
+          createCategory={(name) => createCategory.mutateAsync({ name, budget: 0 })}
           onCreated={(expense) => setEditingExpense(toExpenseView(expense))}
           onClose={close}
           registerCloseHandler={(fn) => {
@@ -250,9 +275,9 @@ function ExpenseForm({
   focusAmount,
   plannedSummary,
   roomOptions,
-  categoryOptions,
   memberOptions,
   rooms,
+  categories,
   expenses,
   projectBudget,
   onCreated,
@@ -260,6 +285,7 @@ function ExpenseForm({
   registerCloseHandler,
   createExpense,
   updateExpense,
+  createCategory,
 }: {
   initial: ExpenseFormData
   expenseId: string | null
@@ -271,9 +297,9 @@ function ExpenseForm({
     qtyHint: string | null
   } | null
   roomOptions: { value: string; label: string }[]
-  categoryOptions: { value: string; label: string }[]
   memberOptions: { value: string; label: string }[]
   rooms: { id: string; name: string; budget: number }[]
+  categories: { id: string; name: string }[]
   expenses: Expense[]
   projectBudget: number
   onCreated: (expense: LocalExpense) => void
@@ -285,6 +311,7 @@ function ExpenseForm({
     form: ExpenseFormData
     quiet?: boolean
   }) => Promise<unknown>
+  createCategory: (name: string) => Promise<{ id: string }>
 }) {
   const lockedStatus: ExpenseStatus = layout === 'plan' ? 'planned' : 'purchased'
   const isBuyLike = layout === 'buy' || layout === 'convert'
@@ -294,6 +321,10 @@ function ExpenseForm({
   })
   const [savedId, setSavedId] = useState<string | null>(expenseId)
   const [showMore, setShowMore] = useState(false)
+  const [showQty, setShowQty] = useState(
+    initial.quantity !== 1 || (!!initial.unit && initial.unit !== 'stk'),
+  )
+  const [lineKey, setLineKey] = useState(0)
   const [showDiscount, setShowDiscount] = useState(
     !!(initial.discount_percent || initial.discount_amount),
   )
@@ -301,45 +332,63 @@ function ExpenseForm({
   const formRef = useRef(form)
   const savedIdRef = useRef(savedId)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const creatingRef = useRef(false)
+  const persistTail = useRef(Promise.resolve(true))
   const amountRef = useRef<HTMLInputElement>(null)
+  const initialCategoryName =
+    categories.find((c) => c.id === initial.category_id)?.name ?? ''
+  const [categoryDraft, setCategoryDraft] = useState(initialCategoryName)
+  const categoryDraftRef = useRef(categoryDraft)
 
   formRef.current = form
   savedIdRef.current = savedId
+  categoryDraftRef.current = categoryDraft
 
   useEffect(() => {
     if (focusAmount) amountRef.current?.focus()
   }, [focusAmount])
 
-  const persist = async (nextForm: ExpenseFormData, id: string | null) => {
+  const persistOnce = async (nextForm: ExpenseFormData, id: string | null): Promise<boolean> => {
     const locked: ExpenseFormData = {
       ...nextForm,
       status: lockedStatus,
     }
-    if (!isMeaningful(locked)) return id
+    if (!isMeaningful(locked)) return true
     setSaveState('saving')
     try {
+      const categoryName = categoryDraftRef.current.trim()
+      if (categoryName && !locked.category_id) {
+        const cat = await createCategory(categoryName)
+        locked.category_id = cat.id
+        formRef.current = { ...formRef.current, category_id: cat.id }
+        setForm((f) => ({ ...f, category_id: cat.id }))
+      }
       if (!id) {
-        if (creatingRef.current) return id
-        creatingRef.current = true
         const created = await createExpense(locked)
-        creatingRef.current = false
         setSavedId(created.id)
+        savedIdRef.current = created.id
         onCreated(created)
         savePrefs(locked)
         setSaveState('saved')
-        return created.id
+        return true
       }
       await updateExpense({ id, form: locked, quiet: true })
       savePrefs(locked)
       setSaveState('saved')
-      return id
+      return true
     } catch (err) {
-      creatingRef.current = false
       setSaveState('idle')
       toast.error(err instanceof Error ? err.message : 'Kunne ikke lagre')
-      return id
+      return false
     }
+  }
+
+  const persist = (nextForm: ExpenseFormData, id: string | null) => {
+    const run = persistTail.current.then(() => persistOnce(nextForm, savedIdRef.current ?? id))
+    persistTail.current = run.then(
+      () => true,
+      () => true,
+    )
+    return run
   }
 
   const scheduleSave = (nextForm: ExpenseFormData) => {
@@ -363,16 +412,41 @@ function ExpenseForm({
     setSaveState((s) => (s === 'saved' ? 'idle' : s))
   }
 
-  const flushAndClose = async () => {
+  const flushPending = () => {
     if (timerRef.current) {
       clearTimeout(timerRef.current)
       timerRef.current = null
     }
+  }
+
+  const flushAndClose = async () => {
+    flushPending()
     const current = formRef.current
     if (isMeaningful(current)) {
       await persist(current, savedIdRef.current)
     }
     onClose()
+  }
+
+  const saveThenNext = async () => {
+    flushPending()
+    const current = formRef.current
+    if (!isMeaningful(current)) {
+      toast.error('Skriv hva som skal kjøpes')
+      return
+    }
+    const ok = await persist(current, savedIdRef.current)
+    if (!ok) return
+    const kept = formRef.current
+    const next = nextPlanLine(kept)
+    formRef.current = next
+    savedIdRef.current = null
+    setForm(next)
+    setSavedId(null)
+    setShowQty(false)
+    setShowDiscount(false)
+    setSaveState('idle')
+    setLineKey((k) => k + 1)
   }
 
   useEffect(() => {
@@ -401,12 +475,30 @@ function ExpenseForm({
   const scopeName = room?.name.toLowerCase() ?? 'prosjektet'
   const afford =
     scopeBudget > 0 ? affordSentence({ amount: total, remaining, scope: scopeName }) : null
+  const convertDelta =
+    layout === 'convert' && plannedSummary
+      ? estimateDeltaSentence(plannedSummary.estimate, total)
+      : null
 
   const roomName = rooms.find((r) => r.id === form.room_id)?.name
   const payerName = memberOptions.find((m) => m.value === form.who_paid)?.label
   const defaultsHint = isBuyLike
     ? [form.supplier.trim() || null, roomName, payerName].filter(Boolean).join(' · ')
-    : [form.supplier.trim() || null].filter(Boolean).join(' · ')
+    : ''
+
+  const descriptionSuggestions = uniqueSuggestions(
+    expenses.map((e) =>
+      e.description === 'Uten tittel' ? '' : firstLine(e.description),
+    ),
+  )
+  const shopSuggestions = uniqueSuggestions(expenses.map((e) => e.supplier))
+  const categorySuggestions = uniqueSuggestions(categories.map((c) => c.name))
+
+  const setCategoryFromName = (name: string) => {
+    setCategoryDraft(name)
+    const match = categories.find((c) => normalizeSuggest(c.name) === normalizeSuggest(name))
+    update({ category_id: match?.id ?? null })
+  }
 
   const saveLabel =
     saveState === 'saving' ? 'Lagrer…' : saveState === 'saved' ? 'Lagret' : 'Endringer lagres automatisk'
@@ -415,7 +507,8 @@ function ExpenseForm({
     <form
       onSubmit={(e) => {
         e.preventDefault()
-        void flushAndClose()
+        if (layout === 'plan') void saveThenNext()
+        else void flushAndClose()
       }}
       className="space-y-4 pb-16"
     >
@@ -424,21 +517,30 @@ function ExpenseForm({
       {layout === 'convert' && plannedSummary && (
         <div className="rounded-xl border border-border bg-white/70 px-4 py-3">
           <p className="text-xs text-muted uppercase tracking-wide">Fra plan</p>
-          <p className="font-medium mt-0.5">{plannedSummary.description}</p>
+          <p className="font-medium mt-0.5 whitespace-pre-wrap">{plannedSummary.description}</p>
           <p className="text-sm text-muted mt-1">
             {plannedSummary.qtyHint ? `${plannedSummary.qtyHint} · ` : ''}
-            Estimat {formatNOK(plannedSummary.estimate)}
+            {plannedSummary.estimate > 0
+              ? `Estimat ${formatNOK(plannedSummary.estimate)}`
+              : 'Mangler estimat'}
           </p>
         </div>
       )}
 
       {layout !== 'convert' && (
-        <Input
-          label="Hva"
+        <SuggestInput
+          key={`desc-${lineKey}`}
+          label={layout === 'plan' ? 'Beskrivelse' : 'Hva'}
           value={form.description === 'Uten tittel' ? '' : form.description}
-          onChange={(e) => update({ description: e.target.value })}
-          placeholder={layout === 'plan' ? 'F.eks. Parkett eik' : 'Hva kjøpte du?'}
+          onChange={(description) => update({ description })}
+          suggestions={descriptionSuggestions}
+          placeholder={
+            layout === 'plan'
+              ? 'Hva skal kjøpes, merke, mål, farge — så mye dere trenger'
+              : 'Hva kjøpte du?'
+          }
           autoFocus={!focusAmount}
+          multiline={layout === 'plan'}
         />
       )}
 
@@ -468,33 +570,109 @@ function ExpenseForm({
           }
         />
       ) : (
-        <QtyPriceFields form={form} priceLabel="Pris/enhet" onUpdate={update} />
+        <>
+          <MoneyInput
+            key={`estimate-${lineKey}`}
+            label="Estimat"
+            value={total}
+            onChange={(amount) => {
+              const qty = form.quantity > 0 ? form.quantity : 1
+              update({
+                quantity: qty,
+                unit: form.unit || 'stk',
+                unit_price: qty > 0 ? amount / qty : amount,
+                total_override: null,
+              })
+            }}
+          />
+          {showQty ? (
+            <div className="grid grid-cols-2 gap-3">
+              <Input
+                label="Antall"
+                type="number"
+                min={0}
+                step="any"
+                inputMode="decimal"
+                value={form.quantity || ''}
+                onChange={(e) => {
+                  const qty = parseFloat(e.target.value)
+                  if (!Number.isFinite(qty) || qty <= 0) return
+                  const currentTotal = calculateTotal(form)
+                  update({
+                    quantity: qty,
+                    unit_price: currentTotal / qty,
+                    total_override: null,
+                  })
+                }}
+              />
+              <Select
+                label="Enhet"
+                value={form.unit}
+                onChange={(e) => update({ unit: e.target.value })}
+                options={DEFAULT_UNITS.map((u) => ({ value: u, label: u }))}
+              />
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setShowQty(true)}
+              className="text-sm text-primary font-medium"
+            >
+              Antall
+            </button>
+          )}
+        </>
       )}
 
-      {layout === 'plan' && (
-        <div className="rounded-xl bg-primary/5 border border-primary/10 p-4">
-          <div className="flex justify-between text-sm text-muted mb-1">
-            <span>
-              {form.quantity || 0} {form.unit || 'stk'} × {formatNOK(form.unit_price || 0)}
-            </span>
-          </div>
-          <div className="flex justify-between font-display text-lg font-semibold">
-            <span>Estimat</span>
-            <span className="text-primary">{formatNOK(total)}</span>
-          </div>
-        </div>
-      )}
+      {convertDelta && <p className="text-sm text-muted -mt-2">{convertDelta}</p>}
 
       {afford && <p className="text-sm text-muted">{afford}</p>}
+
+      {layout === 'plan' && (
+        <div className="space-y-4">
+          <SuggestInput
+            label="Butikk"
+            value={form.supplier}
+            onChange={(supplier) => update({ supplier })}
+            suggestions={shopSuggestions}
+            placeholder="F.eks. Byggmakker"
+          />
+          <SuggestInput
+            label="Kategori"
+            value={categoryDraft}
+            onChange={setCategoryFromName}
+            suggestions={categorySuggestions}
+            placeholder="F.eks. Materialer"
+          />
+        </div>
+      )}
 
       {defaultsHint && (
         <p className="text-xs text-muted">{defaultsHint}</p>
       )}
 
-      <Button type="submit" size="lg" className="w-full">
-        Ferdig
-      </Button>
+      {layout === 'plan' ? (
+        <div className="flex flex-col gap-2">
+          <Button type="submit" size="lg" className="w-full">
+            {roomName ? `Én til i ${roomName.toLowerCase()}` : 'Én til'}
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="lg"
+            className="w-full"
+            onClick={() => void flushAndClose()}
+          >
+            Ferdig for nå
+          </Button>
+        </div>
+      ) : (
+        <Button type="submit" size="lg" className="w-full">
+          Ferdig
+        </Button>
+      )}
 
+      {isBuyLike && (
       <button
         type="button"
         onClick={() => setShowMore((v) => !v)}
@@ -503,49 +681,43 @@ function ExpenseForm({
         {showMore ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
         Mer
       </button>
+      )}
 
-      {showMore && (
+      {isBuyLike && showMore && (
         <div className="space-y-4 pt-1">
-          <Input
+          <SuggestInput
             label="Butikk"
             value={form.supplier}
-            onChange={(e) => update({ supplier: e.target.value })}
+            onChange={(supplier) => update({ supplier })}
+            suggestions={shopSuggestions}
             placeholder="F.eks. Byggmakker"
           />
 
-          {isBuyLike && (
-            <Select
-              label="Betalt av"
-              value={form.who_paid}
-              onChange={(e) => update({ who_paid: e.target.value })}
-              options={memberOptions}
-              placeholder="Velg person"
-            />
-          )}
-
-          {isBuyLike && (
-            <Select
-              label="Rom"
-              value={form.room_id ?? ''}
-              onChange={(e) => update({ room_id: e.target.value || null })}
-              options={roomOptions}
-              placeholder="Velg rom"
-            />
-          )}
-
           <Select
-            label="Kategori"
-            value={form.category_id ?? ''}
-            onChange={(e) => update({ category_id: e.target.value || null })}
-            options={categoryOptions}
-            placeholder="Valgfritt"
+            label="Betalt av"
+            value={form.who_paid}
+            onChange={(e) => update({ who_paid: e.target.value })}
+            options={memberOptions}
+            placeholder="Velg person"
           />
 
-          <InlineNewCategory onCreated={(id) => update({ category_id: id })} />
+          <Select
+            label="Rom"
+            value={form.room_id ?? ''}
+            onChange={(e) => update({ room_id: e.target.value || null })}
+            options={roomOptions}
+            placeholder="Velg rom"
+          />
 
-          {isBuyLike && (
-            <QtyPriceFields form={form} priceLabel="Pris/enhet" onUpdate={update} />
-          )}
+          <SuggestInput
+            label="Kategori"
+            value={categoryDraft}
+            onChange={setCategoryFromName}
+            suggestions={categorySuggestions}
+            placeholder="F.eks. Materialer"
+          />
+
+          <QtyPriceFields form={form} priceLabel="Pris/enhet" onUpdate={update} />
 
           {layout === 'buy' && (
             <button
@@ -634,74 +806,5 @@ function ExpenseForm({
         </div>
       )}
     </form>
-  )
-}
-
-function InlineNewCategory({ onCreated }: { onCreated: (id: string) => void }) {
-  const { createCategory } = useCategories()
-  const [open, setOpen] = useState(false)
-  const [name, setName] = useState('')
-  const [saving, setSaving] = useState(false)
-
-  if (!open) {
-    return (
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="text-sm text-primary font-medium"
-      >
-        + Ny kategori
-      </button>
-    )
-  }
-
-  return (
-    <div className="rounded-xl border border-border bg-white/70 p-3 space-y-3">
-      <Input
-        label="Ny kategori"
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        placeholder="F.eks. Materialer"
-      />
-      <div className="flex gap-2">
-        <Button
-          type="button"
-          variant="secondary"
-          size="sm"
-          className="flex-1"
-          onClick={() => {
-            setOpen(false)
-            setName('')
-          }}
-        >
-          Avbryt
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          className="flex-1"
-          disabled={saving || !name.trim()}
-          onClick={async () => {
-            setSaving(true)
-            try {
-              const cat = await createCategory.mutateAsync({
-                name: name.trim(),
-                budget: 0,
-              })
-              onCreated(cat.id)
-              toast.success('Kategori lagt til')
-              setOpen(false)
-              setName('')
-            } catch (err) {
-              toast.error(err instanceof Error ? err.message : 'Kunne ikke legge til')
-            } finally {
-              setSaving(false)
-            }
-          }}
-        >
-          {saving ? 'Lagrer...' : 'Lagre'}
-        </Button>
-      </div>
-    </div>
   )
 }
