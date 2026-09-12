@@ -8,7 +8,9 @@ export function useCategories() {
 
   const categories = useMemo(() => {
     if (!rawProject) return []
-    return [...rawProject.categories].sort((a, b) => a.name.localeCompare(b.name, 'nb'))
+    return [...rawProject.categories].sort((a, b) =>
+      a.name.localeCompare(b.name, 'nb'),
+    )
   }, [rawProject])
 
   const createCategory = useMutation({
@@ -20,24 +22,32 @@ export function useCategories() {
       if (existing) return existing
       const category: LocalCategory = {
         id: uid(),
+        updated_at: new Date().toISOString(),
         name: input.name.trim(),
         budget: input.budget,
       }
-      await setRawProject({
-        ...rawProject,
-        categories: [...rawProject.categories, category],
-      })
+      await setRawProject((p) => ({
+        ...p,
+        categories: [...p.categories, category],
+      }))
       return category
     },
   })
 
   const updateCategory = useMutation({
-    mutationFn: async ({ id, ...updates }: Partial<LocalCategory> & { id: string }) => {
+    mutationFn: async ({
+      id,
+      ...updates
+    }: Partial<LocalCategory> & { id: string }) => {
       if (!rawProject) throw new Error('Ingen prosjekt')
-      await setRawProject({
-        ...rawProject,
-        categories: rawProject.categories.map((c) => (c.id === id ? { ...c, ...updates } : c)),
-      })
+      await setRawProject((p) => ({
+        ...p,
+        categories: p.categories.map((c) =>
+          c.id === id
+            ? { ...c, ...updates, updated_at: new Date().toISOString() }
+            : c,
+        ),
+      }))
     },
   })
 

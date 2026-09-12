@@ -1,4 +1,4 @@
-import { forwardRef, useEffect, useState } from 'react'
+import { forwardRef, useEffect, useState, useId } from 'react'
 import { formatGroupedNOK, parseNOKInput } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
@@ -12,6 +12,7 @@ interface MoneyInputProps {
 
 export const MoneyInput = forwardRef<HTMLInputElement, MoneyInputProps>(
   ({ label, value, onChange, autoFocus, className }, ref) => {
+    const inputId = useId()
     const [text, setText] = useState(() => formatGroupedNOK(value))
     const [focused, setFocused] = useState(false)
 
@@ -22,10 +23,16 @@ export const MoneyInput = forwardRef<HTMLInputElement, MoneyInputProps>(
     return (
       <div className="space-y-1.5">
         {label && (
-          <label className="block text-sm font-medium text-muted-foreground">{label}</label>
+          <label
+            htmlFor={inputId}
+            className="block text-sm font-medium text-muted-foreground"
+          >
+            {label}
+          </label>
         )}
         <div className="relative">
           <input
+            id={inputId}
             ref={ref}
             inputMode="decimal"
             autoFocus={autoFocus}
@@ -62,7 +69,9 @@ export const MoneyInput = forwardRef<HTMLInputElement, MoneyInputProps>(
               className,
             )}
           />
-          <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm text-muted">kr</span>
+          <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm text-muted">
+            kr
+          </span>
         </div>
       </div>
     )

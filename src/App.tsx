@@ -11,6 +11,7 @@ import { RoomDetailPage } from '@/pages/RoomDetailPage'
 import { ExpensesPage } from '@/pages/ExpensesPage'
 import { SuppliersPage } from '@/pages/SuppliersPage'
 import { SupplierDetailPage } from '@/pages/SupplierDetailPage'
+import { RoomsPage } from '@/pages/RoomsPage'
 import { SettingsPage } from '@/pages/SettingsPage'
 
 const queryClient = new QueryClient({
@@ -33,11 +34,14 @@ export default function App() {
                 <Routes>
                   <Route element={<AppLayout />}>
                     <Route index element={<DashboardPage />} />
-                    <Route path="rom" element={<Navigate to="/" replace />} />
+                    <Route path="rom" element={<RoomsPage />} />
                     <Route path="rom/:roomId" element={<RoomDetailPage />} />
                     <Route path="utgifter" element={<ExpensesPage />} />
                     <Route path="leverandorer" element={<SuppliersPage />} />
-                    <Route path="leverandorer/:name" element={<SupplierDetailPage />} />
+                    <Route
+                      path="leverandorer/:name"
+                      element={<SupplierDetailPage />}
+                    />
                     <Route path="innstillinger" element={<SettingsPage />} />
                   </Route>
                   <Route path="*" element={<Navigate to="/" replace />} />

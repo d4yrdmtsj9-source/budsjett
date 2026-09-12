@@ -1,4 +1,10 @@
-export type ExpenseStatus = 'planned' | 'quoted' | 'ordered' | 'purchased' | 'paid'
+import type { FinanceFields } from './financeTypes'
+export type ExpenseStatus =
+  | 'planned'
+  | 'quoted'
+  | 'ordered'
+  | 'purchased'
+  | 'paid'
 
 export interface Profile {
   id: string
@@ -44,7 +50,7 @@ export interface Category {
   created_at: string
 }
 
-export interface Expense {
+export interface Expense extends FinanceFields {
   id: string
   project_id: string
   room_id: string | null
@@ -94,7 +100,7 @@ export interface ActivityEvent {
   profile?: Profile
 }
 
-export interface ExpenseFormData {
+export interface ExpenseFormData extends FinanceFields {
   description: string
   room_id: string | null
   category_id: string | null
@@ -113,18 +119,27 @@ export interface ExpenseFormData {
 
 export const EXPENSE_STATUS_LABELS: Record<ExpenseStatus, string> = {
   planned: 'Planlagt',
-  quoted: 'Planlagt',
-  ordered: 'Planlagt',
+  quoted: 'Tilbud',
+  ordered: 'Bestilt',
   purchased: 'Kjøpt',
-  paid: 'Kjøpt',
+  paid: 'Betalt',
 }
 
 export const EXPENSE_STATUS_COLORS: Record<ExpenseStatus, string> = {
   planned: 'bg-slate-100 text-slate-700',
   quoted: 'bg-slate-100 text-slate-700',
-  ordered: 'bg-slate-100 text-slate-700',
+  ordered: 'bg-amber-100 text-amber-900',
   purchased: 'bg-teal-100 text-teal-800',
   paid: 'bg-teal-100 text-teal-800',
 }
 
-export const DEFAULT_UNITS = ['stk', 'm', 'm²', 'm³', 'kg', 'liter', 'pakke', 'time']
+export const DEFAULT_UNITS = [
+  'stk',
+  'm',
+  'm²',
+  'm³',
+  'kg',
+  'liter',
+  'pakke',
+  'time',
+]

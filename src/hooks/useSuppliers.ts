@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { useExpenses } from './useExpenses'
-import { getExpenseTotal, sumPaidExpenses, sumPlannedExpenses } from '@/lib/calc'
+import { financials } from '@/lib/finance'
 import type { Expense } from '@/lib/types'
 
 export interface SupplierSummary {
@@ -27,16 +27,20 @@ export function useSuppliers() {
     }
     const result: SupplierSummary[] = []
     for (const { display, list } of map.values()) {
+      const f = financials(list)
       result.push({
         name: display,
         expenses: list,
         expenseCount: list.length,
-        totalAmount: list.reduce((s, e) => s + getExpenseTotal(e), 0),
-        paidAmount: sumPaidExpenses(list),
-        plannedAmount: sumPlannedExpenses(list),
+        totalAmount: f.projected,
+        paidAmount: f.paid,
+        plannedAmount: f.planned + f.ordered,
       })
     }
-    return result.sort((a, b) => b.plannedAmount - a.plannedAmount || b.paidAmount - a.paidAmount)
+    return result.sort(
+      (a, b) =>
+        b.plannedAmount - a.plannedAmount || b.paidAmount - a.paidAmount,
+    )
   }, [expenses])
 
   return { suppliers, data: suppliers, isLoading }
@@ -44,7 +48,7 @@ export function useSuppliers() {
 
 export function useSupplier(name: string | undefined) {
   const { suppliers, isLoading } = useSuppliers()
-  const decoded = name ? decodeURIComponent(name) : ''
+  const decoded = name ?? ''
   const supplier =
     suppliers.find((s) => s.name === decoded) ??
     suppliers.find((s) => s.name.toLowerCase() === decoded.toLowerCase()) ??

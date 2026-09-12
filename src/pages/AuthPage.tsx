@@ -1,3 +1,4 @@
+import { startDemo } from '@/lib/demo'
 import { useState, type ReactNode } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import { useProject } from '@/hooks/useProject'
@@ -109,9 +110,11 @@ function OnboardingPage() {
     <div className="min-h-dvh flex flex-col items-center justify-center px-4 py-8 safe-top safe-bottom">
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
-          <h1 className="font-display text-4xl font-bold text-primary">Renover</h1>
+          <h1 className="font-display text-4xl font-bold text-primary">
+            Renover
+          </h1>
           <p className="text-muted text-sm mt-2">
-            Ingen konto — bruk invitasjonskode for å åpne prosjektet på flere enheter.
+            En roligere vei fra oppussingsplan til ferdig hjem.
           </p>
         </div>
 
@@ -165,9 +168,15 @@ function OnboardingPage() {
                     value={budget}
                     onChange={(e) => setBudget(e.target.value)}
                     placeholder="500000"
+                    min="0"
                   />
                   {error && <p className="text-sm text-destructive">{error}</p>}
-                  <Button type="submit" size="lg" className="w-full" disabled={loading}>
+                  <Button
+                    type="submit"
+                    size="lg"
+                    className="w-full"
+                    disabled={loading}
+                  >
                     {loading ? 'Venter...' : 'Start prosjekt'}
                   </Button>
                 </form>
@@ -176,17 +185,24 @@ function OnboardingPage() {
                   <Input
                     label="Invitasjonskode"
                     value={inviteCode}
-                    onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
+                    onChange={(e) =>
+                      setInviteCode(e.target.value.toUpperCase())
+                    }
                     placeholder="ABCD12"
                     required
                     autoFocus
                   />
                   <p className="text-xs text-muted">
-                    Samme kode som under Innstillinger. På ny PC: velg deg selv i neste steg —
-                    ikke lag en ny person.
+                    Samme kode som under Innstillinger. På ny PC: velg deg selv
+                    i neste steg — ikke lag en ny person.
                   </p>
                   {error && <p className="text-sm text-destructive">{error}</p>}
-                  <Button type="submit" size="lg" className="w-full" disabled={loading}>
+                  <Button
+                    type="submit"
+                    size="lg"
+                    className="w-full"
+                    disabled={loading}
+                  >
                     {loading ? 'Henter prosjekt...' : 'Fortsett'}
                   </Button>
                 </form>
@@ -198,7 +214,9 @@ function OnboardingPage() {
             <div className="space-y-4">
               <div>
                 <p className="text-sm text-muted">Prosjekt</p>
-                <h2 className="font-display text-xl font-semibold">{foundProject.name}</h2>
+                <h2 className="font-display text-xl font-semibold">
+                  {foundProject.name}
+                </h2>
               </div>
 
               <div>
@@ -220,8 +238,13 @@ function OnboardingPage() {
               </div>
 
               {foundProject.members.length < 2 && (
-                <form onSubmit={handleAddNewPerson} className="space-y-3 pt-2 border-t border-border">
-                  <p className="text-sm font-medium">Eller legg til ny person</p>
+                <form
+                  onSubmit={handleAddNewPerson}
+                  className="space-y-3 pt-2 border-t border-border"
+                >
+                  <p className="text-sm font-medium">
+                    Eller legg til ny person
+                  </p>
                   <Input
                     label="Navn"
                     value={displayName}
@@ -237,23 +260,43 @@ function OnboardingPage() {
 
               {foundProject.members.length >= 2 && (
                 <p className="text-xs text-muted">
-                  Begge plassene er tatt. Velg deg selv over for å åpne prosjektet på denne
-                  enheten.
+                  Begge plassene er tatt. Velg deg selv over for å åpne
+                  prosjektet på denne enheten.
                 </p>
               )}
 
               {error && <p className="text-sm text-destructive">{error}</p>}
 
-              <Button type="button" variant="ghost" className="w-full" onClick={resetJoin}>
+              <Button
+                type="button"
+                variant="ghost"
+                className="w-full"
+                onClick={resetJoin}
+              >
                 Tilbake
               </Button>
             </div>
           )}
         </Card>
 
-        <p className="text-center text-xs text-muted mt-6">
-          Ny PC? Velg «Åpne / bli med», skriv koden, og trykk «Fortsett som [ditt navn]».
-        </p>
+        <div className="text-center mt-6 space-y-3">
+          <Button
+            variant="ghost"
+            disabled={loading}
+            onClick={() => {
+              setLoading(true)
+              void startDemo().catch(() => {
+                setError('Kunne ikke åpne eksempelet')
+                setLoading(false)
+              })
+            }}
+          >
+            Utforsk et eksempel →
+          </Button>
+          <p className="text-xs text-muted">
+            Ingen konto nødvendig. Del prosjektet med invitasjonskode.
+          </p>
+        </div>
       </div>
     </div>
   )

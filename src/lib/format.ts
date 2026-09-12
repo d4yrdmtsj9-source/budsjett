@@ -13,7 +13,9 @@ const nokFormatterPrecise = new Intl.NumberFormat('nb-NO', {
 })
 
 export function formatNOK(amount: number, precise = false): string {
-  return precise ? nokFormatterPrecise.format(amount) : nokFormatter.format(amount)
+  return precise
+    ? nokFormatterPrecise.format(amount)
+    : nokFormatter.format(amount)
 }
 
 /** Grouped digits for input, e.g. 8400 → "8 400" */
@@ -66,5 +68,6 @@ export function formatRelativeDate(date: string): string {
 }
 
 export function todayISO(): string {
-  return new Date().toISOString().split('T')[0]
+  const now = new Date()
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
 }

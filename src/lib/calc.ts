@@ -13,27 +13,44 @@ export function calculateDiscount(
     return Math.min(discountAmount, subtotal)
   }
   if (discountPercent != null && discountPercent > 0) {
-    return subtotal * (discountPercent / 100)
+    return subtotal * (Math.min(100, discountPercent) / 100)
   }
   return 0
 }
 
-export function calculateTotal(data: Pick<
-  ExpenseFormData,
-  'quantity' | 'unit_price' | 'total_override' | 'discount_percent' | 'discount_amount'
->): number {
+export function calculateTotal(
+  data: Pick<
+    ExpenseFormData,
+    | 'quantity'
+    | 'unit_price'
+    | 'total_override'
+    | 'discount_percent'
+    | 'discount_amount'
+  >,
+): number {
   if (data.total_override != null && data.total_override >= 0) {
     return data.total_override
   }
   const subtotal = calculateSubtotal(data.quantity, data.unit_price)
-  const discount = calculateDiscount(subtotal, data.discount_percent, data.discount_amount)
+  const discount = calculateDiscount(
+    subtotal,
+    data.discount_percent,
+    data.discount_amount,
+  )
   return Math.max(0, subtotal - discount)
 }
 
-export function getExpenseTotal(expense: Pick<
-  Expense,
-  'total' | 'quantity' | 'unit_price' | 'total_override' | 'discount_percent' | 'discount_amount'
->): number {
+export function getExpenseTotal(
+  expense: Pick<
+    Expense,
+    | 'total'
+    | 'quantity'
+    | 'unit_price'
+    | 'total_override'
+    | 'discount_percent'
+    | 'discount_amount'
+  >,
+): number {
   if (expense.total != null && expense.total > 0) {
     return expense.total
   }
@@ -78,7 +95,11 @@ export function remainingBudget(budget: number, spent: number): number {
   return budget - spent
 }
 
-export function budgetRemaining(budget: number, bought: number, planned: number): number {
+export function budgetRemaining(
+  budget: number,
+  bought: number,
+  planned: number,
+): number {
   return budget - bought - planned
 }
 
@@ -135,6 +156,7 @@ export function defaultExpenseForm(): ExpenseFormData {
 
 export function expenseToForm(expense: Expense): ExpenseFormData {
   return {
+    ...expense,
     description: expense.description,
     room_id: expense.room_id,
     category_id: expense.category_id,
@@ -145,7 +167,8 @@ export function expenseToForm(expense: Expense): ExpenseFormData {
     discount_percent: expense.discount_percent,
     discount_amount: expense.discount_amount,
     supplier: expense.supplier ?? '',
-    expense_date: expense.expense_date ?? new Date().toISOString().split('T')[0],
+    expense_date:
+      expense.expense_date ?? new Date().toISOString().split('T')[0],
     status: expense.status,
     who_paid: expense.who_paid ?? '',
     notes: expense.notes ?? '',

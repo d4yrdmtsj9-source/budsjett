@@ -1,4 +1,4 @@
-import type { LocalProject } from '@/lib/localStore'
+import { normalizeProject, type LocalProject } from '@/lib/localStore'
 import { mergeProjects, projectFingerprint } from '@/lib/mergeProjects'
 import { setCloudSyncStatus } from '@/lib/syncStatus'
 
@@ -30,9 +30,16 @@ function slim(project: LocalProject): LocalProject {
   }
 }
 
-export async function pullCloudProject(inviteCode: string): Promise<LocalProject | null> {
+export async function pullCloudProject(
+  inviteCode: string,
+): Promise<LocalProject | null> {
   const code = inviteCode.trim().toUpperCase()
-  if (!code) return null
+  if (
+    !code ||
+    code.startsWith('DEMO-') ||
+    import.meta.env.VITE_LOCAL_ONLY === 'true'
+  )
+    return null
   try {
     const res = await fetch(entryUrl(code), {
       headers: headers(),
@@ -42,13 +49,20 @@ export async function pullCloudProject(inviteCode: string): Promise<LocalProject
     const data = (await res.json()) as LocalProject
     if (!data?.id || !data.invite_code) return null
     data.invite_code = String(data.invite_code).toUpperCase()
-    return data
+    return normalizeProject(data)
   } catch {
     return null
   }
 }
 
-export async function pushCloudProject(project: LocalProject): Promise<boolean> {
+export async function pushCloudProject(
+  project: LocalProject,
+): Promise<boolean> {
+  if (
+    project.invite_code.startsWith('DEMO-') ||
+    import.meta.env.VITE_LOCAL_ONLY === 'true'
+  )
+    return false
   if (!KEY || !project.invite_code) {
     setCloudSyncStatus('local-only')
     return false
@@ -92,6 +106,11 @@ export async function pushCloudProject(project: LocalProject): Promise<boolean> 
 let pushTimer: ReturnType<typeof setTimeout> | null = null
 
 export function scheduleCloudPush(project: LocalProject) {
+  if (
+    project.invite_code.startsWith('DEMO-') ||
+    import.meta.env.VITE_LOCAL_ONLY === 'true'
+  )
+    return
   setCloudSyncStatus('pending')
   if (pushTimer) clearTimeout(pushTimer)
   pushTimer = setTimeout(() => {
@@ -114,7 +133,8 @@ export async function mergeCloudProject(
   setCloudSyncStatus('ok')
   if (!local) return cloud
   if (local.id !== cloud.id) {
-    const newer = new Date(cloud.updated_at) >= new Date(local.updated_at) ? cloud : local
+    const newer =
+      new Date(cloud.updated_at) >= new Date(local.updated_at) ? cloud : local
     if (newer === local) void pushCloudProject(local)
     return newer
   }
