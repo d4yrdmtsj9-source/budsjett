@@ -34,16 +34,20 @@ export function SuppliersPage() {
               to={`/leverandorer/${encodeURIComponent(supplier.name)}`}
             >
               <Card>
-                <h3 className="font-display font-semibold mb-2">{supplier.name}</h3>
+                <h3 className="font-display font-semibold mb-2">
+                  {supplier.name}
+                </h3>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <p className="text-xs text-muted">Å kjøpe</p>
+                    <p className="text-xs text-muted">Gjenstår</p>
                     <p className="font-display text-sm font-semibold">
-                      {supplier.plannedAmount > 0 ? formatNOK(supplier.plannedAmount) : '—'}
+                      {supplier.plannedAmount > 0
+                        ? formatNOK(supplier.plannedAmount)
+                        : '—'}
                     </p>
                   </div>
                   <div>
-                    <p className="text-xs text-muted">Kjøpt</p>
+                    <p className="text-xs text-muted">Betalt netto</p>
                     <p className="font-display text-sm font-semibold">
                       {formatNOK(supplier.paidAmount)}
                     </p>

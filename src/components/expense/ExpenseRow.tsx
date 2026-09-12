@@ -1,236 +1,154 @@
-import { MoreHorizontal, Copy, Trash2, Pencil, ShoppingBag, ClipboardList } from 'lucide-react'
+import {
+  Copy,
+  Trash2,
+  ArrowUpRight,
+  MoreHorizontal,
+  Paperclip,
+  Split,
+} from 'lucide-react'
 import { useState } from 'react'
-import { Card } from '@/components/ui/Card'
 import { StatusBadge } from '@/components/ui/Badge'
-import { Button } from '@/components/ui/Button'
 import { useExpenseSheet } from '@/hooks/useExpenseSheet'
 import { useExpenses } from '@/hooks/useExpenses'
-import { useProject } from '@/hooks/useProject'
-import { getExpenseTotal } from '@/lib/calc'
-import { formatNOK, formatDate } from '@/lib/format'
+import {
+  paidAmount,
+  outstanding,
+  netCost,
+  knownPrice,
+  estimateDelta,
+  pendingRefund,
+} from '@/lib/finance'
+import { formatNOK } from '@/lib/format'
 import type { Expense } from '@/lib/types'
-import { cn } from '@/lib/utils'
-
-interface ExpenseRowProps {
+export function ExpenseRow({
+  expense,
+  showRoom = true,
+  showCategory = true,
+}: {
   expense: Expense
   showRoom?: boolean
   showCategory?: boolean
-}
-
-export function ExpenseRow({ expense, showRoom = true, showCategory = true }: ExpenseRowProps) {
-  const { openEdit, openPurchase } = useExpenseSheet()
-  const { softDeleteExpense, duplicateExpense, setExpenseStatus } = useExpenses()
-  const { members } = useProject()
-  const [menuOpen, setMenuOpen] = useState(false)
-
-  const total = getExpenseTotal(expense)
-  const canPurchase =
-    expense.status === 'planned' || expense.status === 'quoted' || expense.status === 'ordered'
-  const isPurchase = expense.status === 'purchased' || expense.status === 'paid'
-  const paidBy = members.find((m) => m.id === expense.who_paid)
-  const paidByName =
-    paidBy?.profile?.display_name ?? paidBy?.display_name ?? null
-
+}) {
+  const { openEdit } = useExpenseSheet()
+  const { softDeleteExpense, duplicateExpense } = useExpenses()
+  const [menu, setMenu] = useState(false)
+  const delta = estimateDelta(expense)
   return (
-    <Card padding="sm" className={cn('relative', menuOpen && 'z-[45]')}>
-      <div className="flex items-start gap-2">
-        <button type="button" onClick={() => openEdit(expense)} className="flex-1 text-left min-w-0">
-          <div className="flex items-start justify-between gap-2">
-            <div className="min-w-0">
-              <p className="font-medium text-sm truncate">{expense.description}</p>
-              <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-0.5">
-                {canPurchase && expense.quantity > 0 && (
-                  <span className="text-xs text-muted">
-                    {expense.quantity} {expense.unit || 'stk'}
-                  </span>
-                )}
-                {showRoom && expense.room && (
-                  <span className="text-xs text-muted">
-                    {canPurchase && expense.quantity > 0 ? '· ' : ''}
-                    {expense.room.name}
-                  </span>
-                )}
-                {showCategory && expense.category && (
-                  <span className="text-xs text-muted">· {expense.category.name}</span>
-                )}
-                {expense.supplier && (
-                  <span className="text-xs text-muted">· {expense.supplier}</span>
-                )}
-                {isPurchase && paidByName && (
-                  <span className="text-xs text-muted">· {paidByName}</span>
-                )}
-              </div>
-            </div>
-            <div className="text-right shrink-0">
-              {canPurchase ? (
-                <>
-                  <p className="text-[10px] uppercase tracking-wide text-muted">Estimat</p>
-                  <p className="font-display font-semibold text-sm text-muted">
-                    {total > 0 ? formatNOK(total) : '—'}
-                  </p>
-                </>
-              ) : (
-                <p className="font-display font-semibold text-sm">{formatNOK(total)}</p>
-              )}
-              {expense.expense_date && isPurchase && (
-                <p className="text-xs text-muted">{formatDate(expense.expense_date)}</p>
-              )}
-            </div>
-          </div>
-          <div className="mt-2">
+    <div
+      className={`expense-row ${expense.budget_included === false ? 'expense-alternative' : ''}`}
+    >
+      <button className="expense-main" onClick={() => openEdit(expense)}>
+        <div className="expense-description">
+          <strong>{expense.description}</strong>
+          <p>
+            {[
+              showRoom && expense.room?.name,
+              expense.supplier,
+              showCategory && expense.category?.name,
+            ]
+              .filter(Boolean)
+              .join(' · ') || 'Ingen butikk eller rom valgt'}
+          </p>
+          <div className="expense-badges">
             <StatusBadge status={expense.status} />
-          </div>
-        </button>
-
-        <div className="flex flex-col items-end gap-1 shrink-0">
-          {canPurchase && (
-            <Button
-              type="button"
-              size="sm"
-              variant="secondary"
-              className="h-8 px-2.5 text-xs"
-              onClick={(e) => {
-                e.stopPropagation()
-                openPurchase(expense)
-              }}
-            >
-              <ShoppingBag className="h-3.5 w-3.5" />
-              Kjøp
-            </Button>
-          )}
-          {isPurchase && (
-            <Button
-              type="button"
-              size="sm"
-              variant="secondary"
-              className="h-8 px-2.5 text-xs"
-              onClick={(e) => {
-                e.stopPropagation()
-                setExpenseStatus.mutate({ id: expense.id, status: 'planned' })
-              }}
-            >
-              <ClipboardList className="h-3.5 w-3.5" />
-              Planlagt
-            </Button>
-          )}
-          <div className="relative">
-            <button
-              type="button"
-              onClick={() => setMenuOpen(!menuOpen)}
-              className="h-9 w-9 rounded-lg flex items-center justify-center hover:bg-black/5"
-            >
-              <MoreHorizontal className="h-4 w-4" />
-            </button>
-            {menuOpen && (
-              <>
-                <div className="fixed inset-0 z-[44]" onClick={() => setMenuOpen(false)} />
-                <div className="absolute right-0 top-full mt-1 z-[45] w-40 rounded-xl bg-white shadow-lg border border-border py-1 animate-fade-in">
-                  <MenuItem
-                    icon={Pencil}
-                    label="Rediger"
-                    onClick={() => {
-                      setMenuOpen(false)
-                      openEdit(expense)
-                    }}
-                  />
-                  {canPurchase && (
-                    <MenuItem
-                      icon={ShoppingBag}
-                      label="Registrer kjøp"
-                      onClick={() => {
-                        setMenuOpen(false)
-                        openPurchase(expense)
-                      }}
-                    />
-                  )}
-                  {isPurchase && (
-                    <MenuItem
-                      icon={ClipboardList}
-                      label="Sett til planlagt"
-                      onClick={() => {
-                        setMenuOpen(false)
-                        setExpenseStatus.mutate({ id: expense.id, status: 'planned' })
-                      }}
-                    />
-                  )}
-                  <MenuItem
-                    icon={Copy}
-                    label="Dupliser"
-                    onClick={() => {
-                      setMenuOpen(false)
-                      duplicateExpense.mutate(expense)
-                    }}
-                  />
-                  <MenuItem
-                    icon={Trash2}
-                    label="Slett"
-                    destructive
-                    onClick={() => {
-                      setMenuOpen(false)
-                      softDeleteExpense.mutate(expense.id)
-                    }}
-                  />
-                </div>
-              </>
+            {expense.budget_included === false && (
+              <span className="mini-badge">Alternativ · utenfor budsjett</span>
+            )}
+            {(expense.receipts?.length ?? 0) > 0 && <Paperclip size={13} />}
+            {(expense.allocations?.length ?? 0) > 0 && <Split size={13} />}
+            {paidAmount(expense) > 0 && outstanding(expense) > 0 && (
+              <span className="mini-badge amber">Delbetalt</span>
+            )}
+            {pendingRefund(expense) > 0 && (
+              <span className="mini-badge amber">Venter refusjon</span>
             )}
           </div>
         </div>
+        <div className="expense-amount">
+          <strong>
+            {knownPrice(expense) ? formatNOK(netCost(expense)) : 'Pris mangler'}
+          </strong>
+          {delta != null && delta !== 0 ? (
+            <span className={delta > 0 ? 'text-destructive' : 'text-primary'}>
+              {delta > 0 ? '+' : '−'}
+              {formatNOK(Math.abs(delta))} mot estimat
+            </span>
+          ) : (
+            <span>
+              {paidAmount(expense) > 0
+                ? `${formatNOK(paidAmount(expense))} betalt`
+                : 'Trykk for detaljer'}
+            </span>
+          )}
+        </div>
+      </button>
+      <div className="expense-actions">
+        <button
+          aria-label={`Handlinger for ${expense.description}`}
+          aria-expanded={menu}
+          onClick={() => setMenu(!menu)}
+        >
+          <MoreHorizontal size={20} />
+        </button>
       </div>
-    </Card>
-  )
-}
-
-function MenuItem({
-  icon: Icon,
-  label,
-  onClick,
-  destructive,
-}: {
-  icon: React.ComponentType<{ className?: string }>
-  label: string
-  onClick: () => void
-  destructive?: boolean
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        'w-full flex items-center gap-2 px-3 py-2.5 text-sm hover:bg-black/5 transition-colors',
-        destructive && 'text-destructive',
+      {menu && (
+        <div className="expense-menu">
+          <button
+            onClick={() => {
+              setMenu(false)
+              openEdit(expense)
+            }}
+          >
+            <ArrowUpRight size={15} />
+            Rediger
+          </button>
+          <button
+            onClick={() => {
+              setMenu(false)
+              duplicateExpense.mutate(expense)
+            }}
+          >
+            <Copy size={15} />
+            Dupliser
+          </button>
+          <button
+            className="text-destructive"
+            onClick={() => {
+              setMenu(false)
+              softDeleteExpense.mutate(expense.id)
+            }}
+          >
+            <Trash2 size={15} />
+            Slett
+          </button>
+        </div>
       )}
-    >
-      <Icon className="h-4 w-4" />
-      {label}
-    </button>
+    </div>
   )
 }
-
 export function ExpenseList({
   expenses,
   showRoom = true,
   showCategory = true,
-  emptyMessage = 'Ingen utgifter ennå',
+  emptyMessage = 'Ingen poster å vise',
 }: {
   expenses: Expense[]
   showRoom?: boolean
   showCategory?: boolean
   emptyMessage?: string
 }) {
-  if (expenses.length === 0) {
-    return <p className="text-sm text-muted text-center py-8">{emptyMessage}</p>
-  }
-
-  return (
-    <div className="space-y-2">
-      {expenses.map((expense) => (
+  return expenses.length ? (
+    <div className="expense-list">
+      {expenses.map((e) => (
         <ExpenseRow
-          key={expense.id}
-          expense={expense}
+          key={e.id}
+          expense={e}
           showRoom={showRoom}
           showCategory={showCategory}
         />
       ))}
     </div>
+  ) : (
+    <p className="plain-empty text-sm">{emptyMessage}</p>
   )
 }

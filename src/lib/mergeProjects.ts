@@ -1,5 +1,11 @@
-import type { LocalCategory, LocalExpense, LocalMember, LocalProject, LocalRoom } from '@/lib/localStore'
-import { normalizeMember } from '@/lib/localStore'
+import type {
+  LocalCategory,
+  LocalExpense,
+  LocalMember,
+  LocalProject,
+  LocalRoom,
+} from './localStore.ts'
+import { normalizeMember } from './localStore.ts'
 
 function stamp(value: string | null | undefined): number {
   if (!value) return 0
@@ -26,7 +32,11 @@ function mergeMembers(a: LocalMember[], b: LocalMember[]): LocalMember[] {
   return [...map.values()]
 }
 
-function mergeRooms(local: LocalRoom[], cloud: LocalRoom[], preferCloud: boolean): LocalRoom[] {
+function mergeRooms(
+  local: LocalRoom[],
+  cloud: LocalRoom[],
+  preferCloud: boolean,
+): LocalRoom[] {
   const map = new Map<string, LocalRoom>()
   const first = preferCloud ? cloud : local
   const second = preferCloud ? local : cloud
@@ -40,10 +50,16 @@ function mergeRooms(local: LocalRoom[], cloud: LocalRoom[], preferCloud: boolean
     const prevGone = !!prev.deleted_at
     const nextGone = !!room.deleted_at
     if (nextGone !== prevGone) {
-      map.set(room.id, stamp(room.deleted_at) >= stamp(prev.deleted_at) ? room : prev)
+      map.set(
+        room.id,
+        stamp(room.deleted_at) >= stamp(prev.deleted_at) ? room : prev,
+      )
       continue
     }
-    map.set(room.id, prev)
+    map.set(
+      room.id,
+      stamp(room.updated_at) > stamp(prev.updated_at) ? room : prev,
+    )
   }
   return [...map.values()]
 }
@@ -58,12 +74,17 @@ function mergeCategories(
   const second = preferCloud ? local : cloud
   for (const cat of first) map.set(cat.id, cat)
   for (const cat of second) {
-    if (!map.has(cat.id)) map.set(cat.id, cat)
+    const prev = map.get(cat.id)
+    if (!prev || stamp(cat.updated_at) > stamp(prev.updated_at))
+      map.set(cat.id, cat)
   }
   return [...map.values()]
 }
 
-function mergeExpenses(local: LocalExpense[], cloud: LocalExpense[]): LocalExpense[] {
+function mergeExpenses(
+  local: LocalExpense[],
+  cloud: LocalExpense[],
+): LocalExpense[] {
   const map = new Map<string, LocalExpense>()
   for (const expense of [...local, ...cloud]) {
     const prev = map.get(expense.id)
@@ -74,7 +95,10 @@ function mergeExpenses(local: LocalExpense[], cloud: LocalExpense[]): LocalExpen
   return [...map.values()]
 }
 
-function mergeActivity(local: LocalProject['activity'], cloud: LocalProject['activity']) {
+function mergeActivity(
+  local: LocalProject['activity'],
+  cloud: LocalProject['activity'],
+) {
   const map = new Map<string, LocalProject['activity'][number]>()
   for (const item of [...cloud, ...local]) map.set(item.id, item)
   return [...map.values()]
@@ -83,7 +107,10 @@ function mergeActivity(local: LocalProject['activity'], cloud: LocalProject['act
 }
 
 /** Keep both sides' rooms/expenses instead of replacing the whole snapshot. */
-export function mergeProjects(local: LocalProject, cloud: LocalProject): LocalProject {
+export function mergeProjects(
+  local: LocalProject,
+  cloud: LocalProject,
+): LocalProject {
   const preferCloud = stamp(cloud.updated_at) >= stamp(local.updated_at)
   const base = preferCloud ? cloud : local
   return {
@@ -92,19 +119,21 @@ export function mergeProjects(local: LocalProject, cloud: LocalProject): LocalPr
     total_budget: base.total_budget,
     members: mergeMembers(local.members, cloud.members),
     rooms: mergeRooms(local.rooms, cloud.rooms, preferCloud),
-    categories: mergeCategories(local.categories, cloud.categories, preferCloud),
+    categories: mergeCategories(
+      local.categories,
+      cloud.categories,
+      preferCloud,
+    ),
     expenses: mergeExpenses(local.expenses, cloud.expenses),
     activity: mergeActivity(local.activity ?? [], cloud.activity ?? []),
     updated_at:
-      stamp(local.updated_at) >= stamp(cloud.updated_at) ? local.updated_at : cloud.updated_at,
+      stamp(local.updated_at) >= stamp(cloud.updated_at)
+        ? local.updated_at
+        : cloud.updated_at,
   }
 }
 
 export function projectFingerprint(project: LocalProject): string {
-  const expenseKeys = project.expenses
-    .map((e) => `${e.id}:${e.updated_at}:${e.deleted_at ?? ''}`)
-    .sort()
-    .join(',')
-  const roomKeys = project.rooms.map((r) => `${r.id}:${r.deleted_at ?? ''}:${r.name}`).sort().join(',')
-  return `${project.members.length}|${roomKeys}|${expenseKeys}|${project.name}|${project.total_budget}`
+  // Include payments, reserve, allocations and room/category budgets, not just IDs.
+  return JSON.stringify(project)
 }

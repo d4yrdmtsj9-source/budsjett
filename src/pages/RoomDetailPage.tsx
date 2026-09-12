@@ -7,11 +7,11 @@ import { Input } from '@/components/ui/Input'
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner'
 import { Sheet } from '@/components/ui/Sheet'
 import { ExpenseList } from '@/components/expense/ExpenseRow'
-import { BudgetQuad } from '@/components/budget/BudgetQuad'
+import { FinancialOverview } from '@/components/budget/FinancialOverview'
+import { roomPortion, isPlanned } from '@/lib/finance'
 import { useRoom, useRooms } from '@/hooks/useRooms'
 import { useExpenses } from '@/hooks/useExpenses'
 import { useExpenseSheet } from '@/hooks/useExpenseSheet'
-import { isBoughtStatus, overPlanSentence, sumPaidExpenses, sumPlannedExpenses } from '@/lib/calc'
 
 export function RoomDetailPage() {
   const { roomId } = useParams<{ roomId: string }>()
@@ -25,15 +25,13 @@ export function RoomDetailPage() {
   const [budget, setBudget] = useState('')
   const [saving, setSaving] = useState(false)
 
-  const roomExpenses = expenses.filter((e) => e.room_id === roomId)
-  const toBuy = roomExpenses.filter((e) => !isBoughtStatus(e.status))
-  const purchased = roomExpenses.filter((e) => isBoughtStatus(e.status))
-  const planned = sumPlannedExpenses(roomExpenses)
-  const bought = sumPaidExpenses(roomExpenses)
-  const projected = bought + planned
-  const warning = room
-    ? overPlanSentence({ name: room.name, budget: room.budget, projected })
-    : null
+  const roomExpenses = expenses
+  const portions = expenses.flatMap((e) => {
+    const part = roomPortion(e, roomId ?? '')
+    return part ? [part] : []
+  })
+  const toBuy = roomExpenses.filter(isPlanned)
+  const purchased = roomExpenses.filter((e) => !isPlanned(e))
 
   const openEditSheet = () => {
     if (room) {
@@ -67,8 +65,8 @@ export function RoomDetailPage() {
     return (
       <div className="text-center py-12">
         <p className="text-muted">Rom ikke funnet</p>
-        <Link to="/" className="text-primary text-sm mt-2 inline-block">
-          Tilbake til hjem
+        <Link to="/rom" className="text-primary text-sm mt-2 inline-block">
+          Tilbake til rom
         </Link>
       </div>
     )
@@ -77,9 +75,12 @@ export function RoomDetailPage() {
   return (
     <div className="space-y-4 pb-4">
       <header>
-        <Link to="/" className="inline-flex items-center gap-1 text-sm text-muted mb-2">
+        <Link
+          to="/rom"
+          className="inline-flex items-center gap-1 text-sm text-muted mb-2"
+        >
           <ArrowLeft className="h-4 w-4" />
-          Hjem
+          Rom
         </Link>
         <div className="flex items-start justify-between">
           <div>
@@ -92,24 +93,28 @@ export function RoomDetailPage() {
                   : 'Ingenting planlagt ennå'}
             </p>
           </div>
-          <Button variant="ghost" size="icon" onClick={openEditSheet}>
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="Rediger rom"
+            onClick={openEditSheet}
+          >
             <Pencil className="h-4 w-4" />
           </Button>
         </div>
       </header>
 
-      <BudgetQuad
+      <FinancialOverview
+        expenses={portions}
         budget={room.budget}
-        bought={bought}
-        planned={planned}
-        footer={
-          warning ? (
-            <p className="mt-3 text-sm text-destructive">{warning}</p>
-          ) : room.budget <= 0 ? (
-            <p className="text-xs text-muted mt-3">Ingen rombudsjett — sett det under rediger</p>
-          ) : null
-        }
+        scope="ROMBUDSJETT"
       />
+      {expenses.some((e) => e.allocations?.length) && (
+        <p className="text-xs text-muted">
+          Romoversikten viser rommets andel. Postene nedenfor viser hele kjøpet;
+          redigering gjelder alle rom.
+        </p>
+      )}
 
       <div className="flex justify-end gap-2">
         <Button
@@ -119,7 +124,10 @@ export function RoomDetailPage() {
         >
           Kjøp
         </Button>
-        <Button size="sm" onClick={() => openNew({ roomId, status: 'planned' })}>
+        <Button
+          size="sm"
+          onClick={() => openNew({ roomId, status: 'planned' })}
+        >
           Planlegg
         </Button>
       </div>
@@ -144,12 +152,16 @@ export function RoomDetailPage() {
 
       {purchased.length > 0 && (
         <section>
-          <h2 className="font-display font-semibold mb-2">Kjøpt</h2>
+          <h2 className="font-display font-semibold mb-2">Bestilt og kjøpt</h2>
           <ExpenseList expenses={purchased} showRoom={false} />
         </section>
       )}
 
-      <Sheet open={showEdit} onClose={() => setShowEdit(false)} title="Rediger rom">
+      <Sheet
+        open={showEdit}
+        onClose={() => setShowEdit(false)}
+        title="Rediger rom"
+      >
         <form onSubmit={handleUpdate} className="space-y-4 pb-6">
           <Input
             label="Romnavn"
@@ -160,6 +172,8 @@ export function RoomDetailPage() {
           <Input
             label="Budsjett (NOK)"
             type="number"
+            min="0"
+            step="0.01"
             value={budget}
             onChange={(e) => setBudget(e.target.value)}
           />
@@ -186,7 +200,9 @@ export function RoomDetailPage() {
                 setShowEdit(false)
                 navigate('/')
               } catch (err) {
-                toast.error(err instanceof Error ? err.message : 'Kunne ikke fjerne rom')
+                toast.error(
+                  err instanceof Error ? err.message : 'Kunne ikke fjerne rom',
+                )
               } finally {
                 setSaving(false)
               }

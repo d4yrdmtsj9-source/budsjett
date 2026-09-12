@@ -1,3 +1,4 @@
+import type { FinanceFields } from './financeTypes'
 /**
  * Local-first store for Renover.
  * Data lives in IndexedDB and is merged in the cloud by invite code.
@@ -40,7 +41,12 @@ async function idbSet(key: string, value: unknown): Promise<void> {
   })
 }
 
-export type ExpenseStatus = 'planned' | 'quoted' | 'ordered' | 'purchased' | 'paid'
+export type ExpenseStatus =
+  | 'planned'
+  | 'quoted'
+  | 'ordered'
+  | 'purchased'
+  | 'paid'
 
 export interface LocalMember {
   id: string
@@ -52,6 +58,7 @@ export interface LocalMember {
 }
 
 export interface LocalRoom {
+  updated_at?: string
   id: string
   name: string
   budget: number
@@ -61,12 +68,13 @@ export interface LocalRoom {
 }
 
 export interface LocalCategory {
+  updated_at?: string
   id: string
   name: string
   budget: number
 }
 
-export interface LocalExpense {
+export interface LocalExpense extends FinanceFields {
   id: string
   room_id: string | null
   category_id: string | null
@@ -100,6 +108,9 @@ export interface LocalActivity {
 }
 
 export interface LocalProject {
+  schema_version?: number
+  reserve_amount?: number
+  cost_shares?: Record<string, number>
   id: string
   name: string
   invite_code: string
@@ -125,13 +136,17 @@ const SESSION_KEY = 'renover-session-v2'
 const PROJECT_PREFIX = 'renover-project:'
 
 export function uid() {
-  return crypto.randomUUID?.() ?? `id-${Date.now()}-${Math.random().toString(36).slice(2)}`
+  return (
+    crypto.randomUUID?.() ??
+    `id-${Date.now()}-${Math.random().toString(36).slice(2)}`
+  )
 }
 
 export function generateInviteCode() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
   let code = ''
-  for (let i = 0; i < 6; i++) code += chars[Math.floor(Math.random() * chars.length)]
+  for (let i = 0; i < 6; i++)
+    code += chars[Math.floor(Math.random() * chars.length)]
   return code
 }
 
@@ -157,16 +172,37 @@ export function normalizeMember(m: LocalMember): LocalMember {
 export function normalizeProject(project: LocalProject): LocalProject {
   return {
     ...project,
+    schema_version: 2,
+    reserve_amount: project.reserve_amount ?? 0,
     members: project.members.map(normalizeMember),
     expenses: project.expenses.map(normalizeExpense),
   }
 }
 
-function normalizeExpense(expense: LocalExpense): LocalExpense {
-  let status = expense.status
-  if (status === 'quoted' || status === 'ordered') status = 'planned'
-  if (status === 'paid') status = 'purchased'
-  return { ...expense, status }
+export function normalizeExpense(expense: LocalExpense): LocalExpense {
+  // In v1, purchased and paid both meant money already spent. Preserve that meaning.
+  // Never reconstruct an estimate that was overwritten by a previous version.
+  return {
+    ...expense,
+    price_known: expense.price_known ?? expense.total > 0,
+    payments:
+      expense.payments ??
+      ((expense.status === 'purchased' || expense.status === 'paid') &&
+      expense.total > 0
+        ? [
+            {
+              id: `legacy-${expense.id}`,
+              amount: expense.total,
+              kind: 'payment',
+              paid_by: expense.who_paid,
+              date: expense.expense_date,
+            },
+          ]
+        : []),
+    original_estimate: expense.original_estimate ?? null,
+    budget_included: expense.budget_included ?? true,
+    return_amount: expense.return_amount ?? 0,
+  }
 }
 
 const DEVICE_KEY_LS = 'renover-device-key'
@@ -201,12 +237,16 @@ export async function saveSession(session: LocalSession | null) {
   await idbSet(SESSION_KEY, session)
 }
 
-export async function loadProject(projectId: string): Promise<LocalProject | null> {
+export async function loadProject(
+  projectId: string,
+): Promise<LocalProject | null> {
   const p = await idbGet<LocalProject>(PROJECT_PREFIX + projectId)
   return p ? normalizeProject(p) : null
 }
 
-export async function loadProjectByInvite(code: string): Promise<LocalProject | null> {
+export async function loadProjectByInvite(
+  code: string,
+): Promise<LocalProject | null> {
   const db = await openDb()
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE, 'readonly')
@@ -217,7 +257,10 @@ export async function loadProjectByInvite(code: string): Promise<LocalProject | 
         resolve(null)
         return
       }
-      if (typeof cursor.key === 'string' && cursor.key.startsWith(PROJECT_PREFIX)) {
+      if (
+        typeof cursor.key === 'string' &&
+        cursor.key.startsWith(PROJECT_PREFIX)
+      ) {
         const p = cursor.value as LocalProject
         if (p.invite_code === code.toUpperCase()) {
           resolve(normalizeProject(p))
@@ -230,7 +273,10 @@ export async function loadProjectByInvite(code: string): Promise<LocalProject | 
   })
 }
 
-export async function saveProject(project: LocalProject, opts?: { touch?: boolean }) {
+export async function saveProject(
+  project: LocalProject,
+  opts?: { touch?: boolean },
+) {
   const normalized = normalizeProject(project)
   if (opts?.touch !== false) {
     normalized.updated_at = new Date().toISOString()
@@ -240,7 +286,11 @@ export async function saveProject(project: LocalProject, opts?: { touch?: boolea
   return normalized
 }
 
-export function emptyProject(name: string, budget: number, invite: string): LocalProject {
+export function emptyProject(
+  name: string,
+  budget: number,
+  invite: string,
+): LocalProject {
   const now = new Date().toISOString()
   return {
     id: uid(),
@@ -282,4 +332,11 @@ export async function updateProject(
   await saveProject(next)
   notifyProject(next)
   return next
+}
+
+export async function saveReceipt(id: string, file: Blob) {
+  await idbSet(`receipt:${id}`, file)
+}
+export async function readReceipt(id: string): Promise<Blob | null> {
+  return idbGet<Blob>(`receipt:${id}`)
 }

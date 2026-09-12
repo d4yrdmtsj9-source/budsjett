@@ -4,9 +4,16 @@ import { toast } from 'sonner'
 import { useProject } from './useProject'
 import { useAuth } from './useAuth'
 import { calculateTotal } from '@/lib/calc'
-import { uid, type LocalExpense } from '@/lib/localStore'
+import {
+  validateExpense,
+  isPlanned,
+  paymentsOf,
+  knownPrice,
+  applySelectedAlternative,
+} from '@/lib/finance'
+import { uid, type LocalExpense, type LocalProject } from '@/lib/localStore'
+import { todayISO } from '@/lib/format'
 import type { Expense, ExpenseFormData, ExpenseStatus } from '@/lib/types'
-
 interface ExpenseFilters {
   roomId?: string
   categoryId?: string
@@ -15,261 +22,232 @@ interface ExpenseFilters {
   search?: string
   includeDeleted?: boolean
 }
-
-function toExpense(e: LocalExpense, project: { rooms: { id: string; name: string }[]; categories: { id: string; name: string }[] }): Expense {
-  return {
-    ...e,
-    project_id: '',
-    room: project.rooms.find((r) => r.id === e.room_id) as Expense['room'],
-    category: project.categories.find((c) => c.id === e.category_id) as Expense['category'],
-  }
-}
-
+const onError = (e: Error) => toast.error(e.message)
 export function useExpenses(filters: ExpenseFilters = {}) {
   const { rawProject, setRawProject } = useProject()
   const { user, displayName } = useAuth()
-
+  const { roomId, categoryId, status, supplier, search, includeDeleted } =
+    filters
   const expenses = useMemo(() => {
     if (!rawProject) return []
-    let list = rawProject.expenses.map((e) => toExpense(e, rawProject))
-    if (!filters.includeDeleted) list = list.filter((e) => !e.deleted_at)
-    if (filters.roomId) list = list.filter((e) => e.room_id === filters.roomId)
-    if (filters.categoryId) list = list.filter((e) => e.category_id === filters.categoryId)
-    if (filters.status) list = list.filter((e) => e.status === filters.status)
-    if (filters.supplier) {
-      const s = filters.supplier.toLowerCase()
-      list = list.filter((e) => e.supplier?.toLowerCase().includes(s))
-    }
-    if (filters.search) {
-      const s = filters.search.toLowerCase()
-      list = list.filter(
+    return rawProject.expenses
+      .map((e) => ({
+        ...e,
+        project_id: rawProject.id,
+        room: rawProject.rooms.find(
+          (r) => r.id === e.room_id && !r.deleted_at,
+        ) as Expense['room'],
+        category: rawProject.categories.find(
+          (c) => c.id === e.category_id,
+        ) as Expense['category'],
+      }))
+      .filter(
         (e) =>
-          e.description.toLowerCase().includes(s) ||
-          e.supplier?.toLowerCase().includes(s) ||
-          e.notes?.toLowerCase().includes(s),
+          (includeDeleted || !e.deleted_at) &&
+          (!roomId ||
+            e.room_id === roomId ||
+            e.allocations?.some((a) => a.room_id === roomId)) &&
+          (!categoryId || e.category_id === categoryId) &&
+          (!status || e.status === status) &&
+          (!supplier ||
+            e.supplier?.toLowerCase().includes(supplier.toLowerCase())) &&
+          (!search ||
+            [e.description, e.supplier, e.notes, e.room?.name].some((v) =>
+              v?.toLowerCase().includes(search.toLowerCase()),
+            )),
       )
+      .sort((a, b) =>
+        (b.expense_date ?? '').localeCompare(a.expense_date ?? ''),
+      )
+  }, [rawProject, roomId, categoryId, status, supplier, search, includeDeleted])
+  const activity = (p: LocalProject, summary: string) => ({
+    ...p,
+    activity: [
+      {
+        id: uid(),
+        actor_id: user?.id ?? null,
+        actor_name: displayName ?? 'Noen',
+        event_type: 'expense_updated',
+        summary,
+        created_at: new Date().toISOString(),
+      },
+      ...p.activity,
+    ].slice(0, 100),
+  })
+  const saveForm = (
+    form: ExpenseFormData,
+    previous?: LocalExpense,
+  ): LocalExpense => {
+    const error = validateExpense(form)
+    if (error) throw new Error(error)
+    const now = new Date().toISOString()
+    const total = calculateTotal(form)
+    const original =
+      previous?.original_estimate ??
+      (previous &&
+      isPlanned(previous) &&
+      !isPlanned(form) &&
+      (previous.price_known ?? previous.total > 0)
+        ? previous.total
+        : (form.original_estimate ?? null))
+    return {
+      ...previous,
+      ...form,
+      original_estimate: original,
+      id: previous?.id ?? uid(),
+      total,
+      description: form.description.trim(),
+      supplier: form.supplier.trim() || null,
+      notes: form.notes.trim() || null,
+      who_paid: form.who_paid || null,
+      expense_date: form.expense_date || todayISO(),
+      unit: form.unit || 'stk',
+      deleted_at: previous?.deleted_at ?? null,
+      created_by: previous?.created_by ?? user?.id ?? null,
+      updated_by: user?.id ?? null,
+      created_at: previous?.created_at ?? now,
+      updated_at: now,
     }
-    return list.sort((a, b) => (b.expense_date ?? '').localeCompare(a.expense_date ?? ''))
-  }, [rawProject, filters])
-
-  const pushActivity = (project: NonNullable<typeof rawProject>, summary: string, event_type: string) => {
-    project.activity.unshift({
-      id: uid(),
-      actor_id: user?.id ?? null,
-      actor_name: displayName ?? 'Noen',
-      event_type,
-      summary,
-      created_at: new Date().toISOString(),
-    })
-    project.activity = project.activity.slice(0, 100)
   }
-
   const createExpense = useMutation({
     mutationFn: async (form: ExpenseFormData) => {
-      if (!rawProject) throw new Error('Ingen prosjekt')
-      const total = calculateTotal(form)
-      const now = new Date().toISOString()
-      const expense: LocalExpense = {
-        id: uid(),
-        description: form.description.trim(),
-        room_id: form.room_id,
-        category_id: form.category_id,
-        quantity: form.quantity,
-        unit: form.unit || 'stk',
-        unit_price: form.unit_price,
-        total_override: form.total_override,
-        discount_percent: form.discount_percent,
-        discount_amount: form.discount_amount,
-        supplier: form.supplier?.trim() || null,
-        expense_date: form.expense_date || now.slice(0, 10),
-        status: form.status,
-        who_paid: form.who_paid || null,
-        notes: form.notes?.trim() || null,
-        deleted_at: null,
-        created_by: user?.id ?? null,
-        updated_by: user?.id ?? null,
-        created_at: now,
-        updated_at: now,
-        total,
-      }
-      const next = {
-        ...rawProject,
-        expenses: [expense, ...rawProject.expenses],
-      }
-      pushActivity(
-        next,
-        `${displayName ?? 'Noen'} la til ${expense.description} — ${total.toLocaleString('nb-NO')} kr`,
-        'expense_created',
+      const e = saveForm(form)
+      await setRawProject((p) =>
+        activity(
+          { ...p, expenses: applySelectedAlternative([e, ...p.expenses], e) },
+          `${displayName ?? 'Noen'} la til ${e.description}`,
+        ),
       )
-      await setRawProject(next)
-      return expense
+      return e
     },
+    onError,
   })
-
   const updateExpense = useMutation({
     mutationFn: async ({
       id,
       form,
-      quiet,
     }: {
       id: string
       form: ExpenseFormData
       quiet?: boolean
     }) => {
-      if (!rawProject) throw new Error('Ingen prosjekt')
-      const total = calculateTotal(form)
-      const prev = rawProject.expenses.find((e) => e.id === id)
-      const next = {
-        ...rawProject,
-        expenses: rawProject.expenses.map((e) =>
-          e.id === id
-            ? {
-                ...e,
-                description: form.description.trim() || e.description || 'Uten tittel',
-                room_id: form.room_id,
-                category_id: form.category_id,
-                quantity: form.quantity,
-                unit: form.unit || 'stk',
-                unit_price: form.unit_price,
-                total_override: form.total_override,
-                discount_percent: form.discount_percent,
-                discount_amount: form.discount_amount,
-                supplier: form.supplier?.trim() || null,
-                expense_date: form.expense_date,
-                status: form.status,
-                who_paid: form.who_paid || null,
-                notes: form.notes?.trim() || null,
-                total,
-                updated_by: user?.id ?? null,
-                updated_at: new Date().toISOString(),
-              }
-            : e,
-        ),
-      }
-      if (!quiet || (prev && prev.status !== form.status)) {
-        pushActivity(
-          next,
-          `${displayName ?? 'Noen'} oppdaterte ${form.description.trim() || 'utgift'}`,
-          'expense_updated',
+      await setRawProject((p) => {
+        const old = p.expenses.find((e) => e.id === id)
+        if (!old || old.deleted_at)
+          throw new Error('Posten er fjernet. Lukk og åpne listen igjen.')
+        const e = saveForm(form, old)
+        // Selecting one quote excludes the other uncommitted alternatives in its group.
+        const rows = applySelectedAlternative(
+          p.expenses.map((row) => (row.id === id ? e : row)),
+          e,
         )
-      }
-      await setRawProject(next)
+        return activity(
+          { ...p, expenses: rows },
+          `${displayName ?? 'Noen'} oppdaterte ${e.description}`,
+        )
+      })
     },
+    onError,
   })
-
   const softDeleteExpense = useMutation({
     mutationFn: async (input: string | { id: string; quiet?: boolean }) => {
-      const opts = typeof input === 'string' ? { id: input, quiet: false } : input
-      if (!rawProject) throw new Error('Ingen prosjekt')
-      const projectId = rawProject.id
-      const expense = rawProject.expenses.find((e) => e.id === opts.id)
-      const next = {
-        ...rawProject,
-        expenses: rawProject.expenses.map((e) =>
-          e.id === opts.id
-            ? { ...e, deleted_at: new Date().toISOString(), updated_by: user?.id ?? null }
-            : e,
+      const id = typeof input === 'string' ? input : input.id
+      await setRawProject((p) =>
+        activity(
+          {
+            ...p,
+            expenses: p.expenses.map((e) =>
+              e.id === id
+                ? {
+                    ...e,
+                    deleted_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString(),
+                  }
+                : e,
+            ),
+          },
+          'En post ble slettet',
         ),
-      }
-      if (!opts.quiet) {
-        pushActivity(
-          next,
-          `${displayName ?? 'Noen'} slettet ${expense?.description ?? 'utgift'}`,
-          'expense_deleted',
-        )
-      }
-      await setRawProject(next)
-      return { id: opts.id, projectId, quiet: !!opts.quiet }
+      )
+      return id
     },
-    onSuccess: ({ id, projectId, quiet }) => {
-      if (quiet) return
-      toast('Utgift slettet', {
+    onSuccess: (id) =>
+      toast('Post slettet', {
+        duration: 8000,
         action: {
           label: 'Angre',
-          onClick: async () => {
-            const { loadProject } = await import('@/lib/localStore')
-            const current = await loadProject(projectId)
-            if (!current) return
-            current.expenses = current.expenses.map((e) =>
-              e.id === id ? { ...e, deleted_at: null } : e,
-            )
-            await setRawProject(current)
-            toast.success('Utgift gjenopprettet')
+          onClick: () => {
+            void setRawProject((p) => ({
+              ...p,
+              expenses: p.expenses.map((e) =>
+                e.id === id
+                  ? {
+                      ...e,
+                      deleted_at: null,
+                      updated_at: new Date().toISOString(),
+                    }
+                  : e,
+              ),
+            })).catch(onError)
           },
         },
-        duration: 5000,
-      })
-    },
+      }),
+    onError,
   })
-
-  const setExpenseStatus = useMutation({
-    mutationFn: async ({ id, status }: { id: string; status: ExpenseStatus }) => {
-      if (!rawProject) throw new Error('Ingen prosjekt')
-      const expense = rawProject.expenses.find((e) => e.id === id)
-      const next = {
-        ...rawProject,
-        expenses: rawProject.expenses.map((e) =>
-          e.id === id
-            ? {
-                ...e,
-                status,
-                who_paid: status === 'planned' ? null : e.who_paid,
-                updated_by: user?.id ?? null,
-                updated_at: new Date().toISOString(),
-              }
-            : e,
-        ),
-      }
-      const label = status === 'planned' ? 'planlagt' : 'kjøpt'
-      pushActivity(
-        next,
-        `${displayName ?? 'Noen'} satte ${expense?.description ?? 'utgift'} til ${label}`,
-        'expense_updated',
-      )
-      await setRawProject(next)
-    },
-    onSuccess: (_, { status }) => {
-      toast.success(status === 'planned' ? 'Satt tilbake til planlagt' : 'Registrert som kjøp')
-    },
-  })
-
   const duplicateExpense = useMutation({
     mutationFn: async (expense: Expense) => {
-      if (!rawProject) throw new Error('Ingen prosjekt')
-      const total = calculateTotal(expense)
       const now = new Date().toISOString()
-      const copy: LocalExpense = {
+      const copy = {
+        ...expense,
+        unit: expense.unit ?? 'stk',
+        expense_date: expense.expense_date ?? todayISO(),
         id: uid(),
         description: `${expense.description} (kopi)`,
-        room_id: expense.room_id,
-        category_id: expense.category_id,
-        quantity: expense.quantity,
-        unit: expense.unit || 'stk',
-        unit_price: expense.unit_price,
-        total_override: expense.total_override,
-        discount_percent: expense.discount_percent,
-        discount_amount: expense.discount_amount,
-        supplier: expense.supplier,
-        expense_date: expense.expense_date || now.slice(0, 10),
-        status: 'planned',
-        who_paid: expense.who_paid,
-        notes: expense.notes,
-        deleted_at: null,
-        created_by: user?.id ?? null,
-        updated_by: user?.id ?? null,
+        status: 'planned' as const,
+        payments: [],
+        original_estimate: null,
+        receipts: [],
+        return_amount: 0,
+        due_date: null,
+        who_paid: null,
         created_at: now,
         updated_at: now,
-        total,
       }
-      await setRawProject({
-        ...rawProject,
-        expenses: [copy, ...rawProject.expenses],
-      })
-      toast.success('Utgift duplisert')
+      await setRawProject((p) => ({ ...p, expenses: [copy, ...p.expenses] }))
       return copy
     },
+    onSuccess: () => toast.success('Post duplisert'),
+    onError,
   })
-
+  const setExpenseStatus = useMutation({
+    mutationFn: async ({
+      id,
+      status,
+    }: {
+      id: string
+      status: ExpenseStatus
+    }) => {
+      await setRawProject((p) => ({
+        ...p,
+        expenses: p.expenses.map((e) => {
+          if (e.id !== id) return e
+          if (isPlanned({ status }) && paymentsOf(e as Expense).length)
+            throw new Error(
+              'Fjern betalingene i redigering før du setter posten tilbake til planlagt.',
+            )
+          return {
+            ...e,
+            status,
+            original_estimate:
+              e.original_estimate ??
+              (isPlanned(e) && knownPrice(e as Expense) ? e.total : null),
+            updated_at: new Date().toISOString(),
+          }
+        }),
+      }))
+    },
+    onError,
+  })
   return {
     data: expenses,
     expenses,
@@ -280,15 +258,4 @@ export function useExpenses(filters: ExpenseFilters = {}) {
     duplicateExpense,
     setExpenseStatus,
   }
-}
-
-export async function uploadReceipt(_expenseId: string, _file: File, _projectId: string, _userId?: string) {
-  // Receipts: store as data URL in notes for local-first MVP is too heavy;
-  // silently no-op with toast from caller if needed.
-  toast.message('Kvitteringsopplasting lagres lokalt i neste versjon')
-  return null
-}
-
-export function getReceiptUrl(_filePath: string) {
-  return ''
 }

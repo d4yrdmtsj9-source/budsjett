@@ -1,4 +1,12 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  useRef,
+  useCallback,
+  type ReactNode,
+} from 'react'
 import { useAuth, createDeviceKey } from './useAuth'
 import {
   emptyProject,
@@ -12,9 +20,17 @@ import {
   type LocalProject,
   type LocalMember,
 } from '@/lib/localStore'
-import { startProjectSync, publishProject, fetchProjectByInvite } from '@/lib/sync'
-import { mergeCloudProject, pushCloudProject, scheduleCloudPush } from '@/lib/cloudStore'
-import { projectFingerprint } from '@/lib/mergeProjects'
+import {
+  startProjectSync,
+  publishProject,
+  fetchProjectByInvite,
+} from '@/lib/sync'
+import {
+  mergeCloudProject,
+  pushCloudProject,
+  scheduleCloudPush,
+} from '@/lib/cloudStore'
+import { mergeProjects, projectFingerprint } from '@/lib/mergeProjects'
 
 export interface ProjectMemberView {
   id: string
@@ -30,6 +46,8 @@ export interface RenovationProjectView {
   name: string
   invite_code: string
   total_budget: number
+  reserve_amount?: number
+  cost_shares?: Record<string, number>
   created_at: string
 }
 
@@ -39,20 +57,40 @@ interface ProjectContextValue {
   members: ProjectMemberView[]
   loading: boolean
   hasProject: boolean
-  createProject: (name: string, budget: number, displayName: string) => Promise<{ error: string | null }>
+  createProject: (
+    name: string,
+    budget: number,
+    displayName: string,
+  ) => Promise<{ error: string | null }>
   /** Look up a project by invite (for join UI) without creating a session yet */
-  lookupProject: (inviteCode: string) => Promise<{ project: LocalProject | null; error: string | null }>
+  lookupProject: (
+    inviteCode: string,
+  ) => Promise<{ project: LocalProject | null; error: string | null }>
   /** Continue as an existing member, or add a new person if memberId is null */
   joinAs: (
     inviteCode: string,
     opts: { memberId?: string; displayName: string },
   ) => Promise<{ error: string | null }>
   /** @deprecated use joinAs — kept for compatibility */
-  joinProject: (inviteCode: string, displayName: string) => Promise<{ error: string | null }>
-  addMember: (displayName: string) => Promise<{ error: string | null; member?: LocalMember }>
-  updateProject: (updates: Partial<Pick<RenovationProjectView, 'name' | 'total_budget'>>) => Promise<{ error: string | null }>
+  joinProject: (
+    inviteCode: string,
+    displayName: string,
+  ) => Promise<{ error: string | null }>
+  addMember: (
+    displayName: string,
+  ) => Promise<{ error: string | null; member?: LocalMember }>
+  updateProject: (
+    updates: Partial<
+      Pick<
+        RenovationProjectView,
+        'name' | 'total_budget' | 'reserve_amount' | 'cost_shares'
+      >
+    >,
+  ) => Promise<{ error: string | null }>
   refreshProject: () => void
-  setRawProject: (p: LocalProject) => Promise<void>
+  setRawProject: (
+    p: LocalProject | ((current: LocalProject) => LocalProject),
+  ) => Promise<void>
   /** Switch who "I" am on this phone — no logout, same project. */
   switchMember: (memberId: string) => Promise<{ error: string | null }>
 }
@@ -65,6 +103,8 @@ function toView(p: LocalProject): RenovationProjectView {
     name: p.name,
     invite_code: p.invite_code,
     total_budget: p.total_budget,
+    reserve_amount: p.reserve_amount,
+    cost_shares: p.cost_shares,
     created_at: p.created_at,
   }
 }
@@ -93,6 +133,36 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   const { session, setSession } = useAuth()
   const [rawProject, setRaw] = useState<LocalProject | null>(null)
   const [loading, setLoading] = useState(true)
+  const writeQueue = useRef<Promise<void>>(Promise.resolve())
+
+  // A cloud request can finish after a local edit. Merge against the latest
+  // stored data inside the same queue used by local edits, not its old snapshot.
+  const storeIncoming = useCallback(
+    async (incoming: LocalProject | null, projectId: string) => {
+      let result: LocalProject | null = null
+      const task = writeQueue.current
+        .catch(() => {})
+        .then(async () => {
+          const latest = await loadProject(projectId)
+          result =
+            incoming?.id === projectId
+              ? latest
+                ? mergeProjects(latest, incoming)
+                : incoming
+              : latest
+          if (
+            result &&
+            (!latest ||
+              projectFingerprint(result) !== projectFingerprint(latest))
+          )
+            result = await saveProject(result, { touch: false })
+        })
+      writeQueue.current = task
+      await task
+      return result
+    },
+    [],
+  )
 
   const refreshProject = async () => {
     if (!session?.projectId) {
@@ -101,11 +171,12 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       return
     }
     const local = await loadProject(session.projectId)
-    const newer = await mergeCloudProject(local, session.inviteCode)
-    if (newer && (!local || projectFingerprint(newer) !== projectFingerprint(local))) {
-      await saveProject(newer, { touch: false })
+    if (local) {
+      setRaw(local)
+      setLoading(false)
     }
-    setRaw(newer)
+    const newer = await mergeCloudProject(local, session.inviteCode)
+    setRaw(await storeIncoming(newer, session.projectId))
     setLoading(false)
   }
 
@@ -121,10 +192,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       if (document.visibilityState === 'hidden') return
       const local = await loadProject(session.projectId)
       const newer = await mergeCloudProject(local, session.inviteCode)
-      if (newer && local && projectFingerprint(newer) !== projectFingerprint(local)) {
-        await saveProject(newer, { touch: false })
-        setRaw(newer)
-      }
+      await storeIncoming(newer, session.projectId)
     }
 
     const onVis = () => {
@@ -138,7 +206,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       window.removeEventListener('focus', onVis)
       window.clearInterval(id)
     }
-  }, [session?.inviteCode, session?.projectId])
+  }, [session?.inviteCode, session?.projectId, storeIncoming])
 
   useEffect(() => {
     const unsub = subscribeProject((p) => {
@@ -154,14 +222,34 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     return startProjectSync(session.inviteCode, session.projectId, setRaw)
   }, [session?.inviteCode, session?.projectId])
 
-  const setRawProject = async (p: LocalProject) => {
-    const saved = await saveProject(p)
-    setRaw(saved)
-    publishProject(saved)
-    scheduleCloudPush(saved)
+  const setRawProject = async (
+    input: LocalProject | ((current: LocalProject) => LocalProject),
+  ) => {
+    const projectId =
+      typeof input === 'function' ? session?.projectId : input.id
+    if (!projectId) throw new Error('Ingen prosjekt')
+    const task = writeQueue.current
+      .catch(() => {})
+      .then(async () => {
+        const current = await loadProject(projectId)
+        if (typeof input === 'function' && !current)
+          throw new Error('Prosjekt ikke funnet')
+        const saved = await saveProject(
+          typeof input === 'function' ? input(current!) : input,
+        )
+        setRaw(saved)
+        publishProject(saved)
+        scheduleCloudPush(saved)
+      })
+    writeQueue.current = task
+    await task
   }
 
-  const createProject = async (name: string, budget: number, displayName: string) => {
+  const createProject = async (
+    name: string,
+    budget: number,
+    displayName: string,
+  ) => {
     try {
       const deviceKey = session?.deviceKey ?? createDeviceKey()
       const memberId = uid()
@@ -172,7 +260,11 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         device_keys: [deviceKey],
         device_key: deviceKey,
       }
-      const project = emptyProject(name.trim() || 'Vår renovering', budget || 0, invite)
+      const project = emptyProject(
+        name.trim() || 'Vår renovering',
+        budget || 0,
+        invite,
+      )
       project.members = [member]
       project.categories = [
         { id: uid(), name: 'Materialer', budget: 0 },
@@ -215,7 +307,8 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   const lookupProject = async (inviteCode: string) => {
     try {
       const code = inviteCode.trim().toUpperCase()
-      if (code.length < 4) return { project: null, error: 'Skriv inn invitasjonskoden' }
+      if (code.length < 4)
+        return { project: null, error: 'Skriv inn invitasjonskoden' }
       const project = await fetchProjectByInvite(code)
       if (!project) {
         return {
@@ -226,7 +319,10 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       }
       return { project, error: null }
     } catch (e) {
-      return { project: null, error: e instanceof Error ? e.message : 'Kunne ikke hente prosjekt' }
+      return {
+        project: null,
+        error: e instanceof Error ? e.message : 'Kunne ikke hente prosjekt',
+      }
     }
   }
 
@@ -268,7 +364,9 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       if (member) {
         member = attachDevice(member, deviceKey)
         member.display_name = displayName || member.display_name
-        project.members = project.members.map((m) => (m.id === member!.id ? member! : m))
+        project.members = project.members.map((m) =>
+          m.id === member!.id ? member! : m,
+        )
       } else {
         if (project.members.length >= 2) {
           return {
@@ -326,7 +424,9 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         return { error: 'Prosjektet har allerede maks 2 personer' }
       }
       if (
-        rawProject.members.some((m) => normalizeName(m.display_name) === normalizeName(name))
+        rawProject.members.some(
+          (m) => normalizeName(m.display_name) === normalizeName(name),
+        )
       ) {
         return { error: 'Personen finnes allerede' }
       }
@@ -365,7 +465,9 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       const member = attachDevice(found, session.deviceKey)
       const next: LocalProject = {
         ...rawProject,
-        members: rawProject.members.map((m) => (m.id === member.id ? member : m)),
+        members: rawProject.members.map((m) =>
+          m.id === member.id ? member : m,
+        ),
       }
       await setRawProject(next)
       await setSession({
@@ -375,20 +477,45 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       })
       return { error: null }
     } catch (e) {
-      return { error: e instanceof Error ? e.message : 'Kunne ikke bytte person' }
+      return {
+        error: e instanceof Error ? e.message : 'Kunne ikke bytte person',
+      }
     }
   }
 
   const updateProjectFields = async (
-    updates: Partial<Pick<RenovationProjectView, 'name' | 'total_budget'>>,
+    updates: Partial<
+      Pick<
+        RenovationProjectView,
+        'name' | 'total_budget' | 'reserve_amount' | 'cost_shares'
+      >
+    >,
   ) => {
     if (!rawProject) return { error: 'Ingen prosjekt' }
-    const next = {
-      ...rawProject,
-      ...updates,
-      updated_at: new Date().toISOString(),
-    }
-    await setRawProject(next)
+    if (
+      updates.total_budget != null &&
+      (!Number.isFinite(updates.total_budget) || updates.total_budget < 0)
+    )
+      return { error: 'Ugyldig totalramme' }
+    if (
+      updates.reserve_amount != null &&
+      (!Number.isFinite(updates.reserve_amount) ||
+        updates.reserve_amount < 0 ||
+        updates.reserve_amount >
+          (updates.total_budget ?? rawProject.total_budget))
+    )
+      return { error: 'Reserven må være innenfor totalrammen' }
+    if (
+      updates.cost_shares &&
+      (Object.values(updates.cost_shares).some(
+        (n) => !Number.isFinite(n) || n < 0 || n > 100,
+      ) ||
+        Math.abs(
+          Object.values(updates.cost_shares).reduce((a, b) => a + b, 0) - 100,
+        ) > 0.001)
+    )
+      return { error: 'Fordelingen må bli 100 %' }
+    await setRawProject((p) => ({ ...p, ...updates }))
     return { error: null }
   }
 

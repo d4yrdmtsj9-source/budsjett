@@ -33,12 +33,15 @@ function channelNameFor(inviteCode: string) {
  * Sync project state between devices via Supabase Realtime broadcast.
  * Invite code is the channel secret — no auth required.
  */
-export function startProjectSync(
+async function connectProjectSync(
   inviteCode: string,
   projectId: string,
   onUpdate: Handler,
 ) {
-  const supabase = getSupabase()
+  const supabase =
+    inviteCode.startsWith('DEMO-') || import.meta.env.VITE_LOCAL_ONLY === 'true'
+      ? null
+      : await getSupabase()
   if (!supabase) return () => {}
 
   const channel = supabase.channel(channelNameFor(inviteCode), {
@@ -86,8 +89,13 @@ export function startProjectSync(
   }
 }
 
-export function publishProject(project: LocalProject) {
-  const supabase = getSupabase()
+export async function publishProject(project: LocalProject) {
+  if (
+    project.invite_code.startsWith('DEMO-') ||
+    import.meta.env.VITE_LOCAL_ONLY === 'true'
+  )
+    return
+  const supabase = await getSupabase()
   if (!supabase) return
 
   const channel = supabase.channel(channelNameFor(project.invite_code))
@@ -127,7 +135,7 @@ export async function fetchProjectByInvite(
   }
   if (cached) return cached
 
-  const supabase = getSupabase()
+  const supabase = await getSupabase()
   if (!supabase) return null
 
   return new Promise((resolve) => {
@@ -163,9 +171,29 @@ export async function fetchProjectByInvite(
       })
 
     const timer = setTimeout(async () => {
-      const again = (await pullCloudProject(code)) ?? (await loadProjectByInvite(code))
+      const again =
+        (await pullCloudProject(code)) ?? (await loadProjectByInvite(code))
       if (again) await saveProject(again, { touch: false })
       finish(again)
     }, waitMs)
   })
+}
+
+export function startProjectSync(
+  inviteCode: string,
+  projectId: string,
+  onUpdate: Handler,
+) {
+  let cancelled = false
+  let cleanup = () => {}
+  void connectProjectSync(inviteCode, projectId, onUpdate)
+    .then((stop) => {
+      if (cancelled) stop()
+      else cleanup = stop
+    })
+    .catch(() => {})
+  return () => {
+    cancelled = true
+    cleanup()
+  }
 }
