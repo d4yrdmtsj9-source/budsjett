@@ -6,6 +6,7 @@ import type {
   LocalRoom,
 } from './localStore.ts'
 import { normalizeMember } from './localStore.ts'
+import { mergeRecords, mergeInspirations } from './planning.ts'
 
 function stamp(value: string | null | undefined): number {
   if (!value) return 0
@@ -115,6 +116,8 @@ export function mergeProjects(
   const base = preferCloud ? cloud : local
   return {
     ...base,
+    inspirations: mergeInspirations(local.inspirations, cloud.inspirations),
+    tasks: mergeRecords(local.tasks, cloud.tasks),
     name: base.name,
     total_budget: base.total_budget,
     members: mergeMembers(local.members, cloud.members),

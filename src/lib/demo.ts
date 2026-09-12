@@ -1,3 +1,4 @@
+import { palettePresets } from './planning'
 import {
   emptyProject,
   uid,
@@ -117,6 +118,63 @@ export async function startDemo() {
     create('Frakt på benkeplate', 'kitchen', 0, 'planned', 0),
     create('Elektriker', 'living', 0, 'planned', 0),
   ]
+  p.inspirations = [
+    {
+      title: 'Mørk eik og varm stein',
+      room_id: 'kitchen',
+      price: 42000,
+      status: 'chosen' as const,
+    },
+    {
+      title: 'Lys stein på kjøkkenet',
+      room_id: 'kitchen',
+      price: 32000,
+      status: 'idea' as const,
+    },
+    {
+      title: 'Et lite hjemmespa',
+      room_id: 'bath',
+      price: null,
+      status: 'idea' as const,
+    },
+  ].map((i, n) => ({
+    ...i,
+    id: `demo-idea-${n}`,
+    notes: palettePresets[n].note,
+    link: '',
+    image_id: null,
+    before_image_id: null,
+    palette: palettePresets[n].colors,
+    votes: {},
+    updated_at: now,
+    deleted_at: null,
+  }))
+  p.tasks = [
+    {
+      title: 'Finne kjøkkenets uttrykk',
+      status: 'done' as const,
+      milestone: false,
+    },
+    {
+      title: 'Bestille materialprøver',
+      status: 'doing' as const,
+      milestone: false,
+    },
+    {
+      title: 'Kjøkkenet er klart for første middag',
+      status: 'todo' as const,
+      milestone: true,
+    },
+  ].map((t, n) => ({
+    ...t,
+    id: `demo-task-${n}`,
+    room_id: 'kitchen',
+    due_date: '',
+    owner_id: n === 1 ? 'demo-a' : null,
+    notes: '',
+    updated_at: now,
+    deleted_at: null,
+  }))
   p.activity = [
     {
       id: uid(),

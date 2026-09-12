@@ -1,5 +1,5 @@
 import { cn } from '@/lib/utils'
-import { forwardRef, type SelectHTMLAttributes } from 'react'
+import { forwardRef, useId, type SelectHTMLAttributes } from 'react'
 
 interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
   label?: string
@@ -9,11 +9,15 @@ interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
 
 export const Select = forwardRef<HTMLSelectElement, SelectProps>(
   ({ className, label, options, placeholder, id, ...props }, ref) => {
-    const selectId = id ?? label?.toLowerCase().replace(/\s/g, '-')
+    const generatedId = useId()
+    const selectId = id ?? generatedId
     return (
       <div className="space-y-1.5">
         {label && (
-          <label htmlFor={selectId} className="block text-sm font-medium text-muted-foreground">
+          <label
+            htmlFor={selectId}
+            className="block text-sm font-medium text-muted-foreground"
+          >
             {label}
           </label>
         )}

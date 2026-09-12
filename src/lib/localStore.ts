@@ -1,4 +1,5 @@
 import type { FinanceFields } from './financeTypes'
+import type { Inspiration, ProjectTask } from './planning'
 /**
  * Local-first store for Renover.
  * Data lives in IndexedDB and is merged in the cloud by invite code.
@@ -108,6 +109,8 @@ export interface LocalActivity {
 }
 
 export interface LocalProject {
+  inspirations?: Inspiration[]
+  tasks?: ProjectTask[]
   schema_version?: number
   reserve_amount?: number
   cost_shares?: Record<string, number>

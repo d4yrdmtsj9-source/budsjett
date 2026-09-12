@@ -103,6 +103,13 @@ export function RoomDetailPage() {
           </Button>
         </div>
       </header>
+      <div className="discovery-links">
+        <Link to={`/inspo?rom=${roomId}`}>
+          Inspirasjon til {room.name}{' '}
+          <ArrowLeft size={14} className="rotate-180" />
+        </Link>
+        <Link to="/planlegg">Oppgaver og milepæler</Link>
+      </div>
 
       <FinancialOverview
         expenses={portions}

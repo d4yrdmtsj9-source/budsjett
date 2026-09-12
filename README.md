@@ -6,6 +6,9 @@ Oppussingsbudsjett for hjemmet, med norske kroner og opptil to personer i samme 
 
 ## Funksjoner
 
+- Inspo med bilder, fargepaletter, personlige favoritter, før/etter og sammenligning av to ideer.
+- Planlegg med oppgaver, ansvarlig person, måldato, milepæler og fremdrift.
+
 - Oversikt over forventet sluttkostnad, netto betalt, bestillinger, planer og reserve.
 - Rom med egne budsjetter og prosentvis fordeling av felles kjøp.
 - Søk, kategorier, leverandører, statusfiltre og betalingsoversikt etter forfallsmåned.
