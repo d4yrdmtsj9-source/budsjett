@@ -12,9 +12,13 @@ import { useRooms } from '@/hooks/useRooms'
 import { useExpenses } from '@/hooks/useExpenses'
 import { financials, roomPortion } from '@/lib/finance'
 import { formatNOK } from '@/lib/format'
+import { usePlanning } from '@/hooks/usePlanning'
+import { IdeaImage } from '@/components/inspiration/IdeaImage'
+import { palettePresets } from '@/lib/planning'
 export function RoomCards({ limit }: { limit?: number }) {
   const { data: rooms } = useRooms()
   const { expenses } = useExpenses()
+  const { ideas, tasks } = usePlanning()
   return (
     <div className="room-grid">
       {(rooms ?? []).slice(0, limit).map((room, i) => {
@@ -23,6 +27,13 @@ export function RoomCards({ limit }: { limit?: number }) {
           return part ? [part] : []
         })
         const f = financials(portions, room.budget)
+        const inspiration =
+          ideas.find(
+            (idea) => idea.room_id === room.id && idea.status === 'chosen',
+          ) ?? ideas.find((idea) => idea.room_id === room.id)
+        const next = tasks.find(
+          (t) => t.room_id === room.id && t.status !== 'done',
+        )
         const Icon = /kjøkken/i.test(room.name)
           ? CookingPot
           : /bad/i.test(room.name)
@@ -36,6 +47,16 @@ export function RoomCards({ limit }: { limit?: number }) {
                   : House
         return (
           <Link to={`/rom/${room.id}`} key={room.id} className="room-card">
+            <div className="room-cover">
+              <IdeaImage
+                id={inspiration?.image_id}
+                alt={room.name}
+                colors={inspiration?.palette ?? palettePresets[i % 3].colors}
+              />
+              <span className="room-cover-label">
+                {inspiration?.title ?? 'Rom for nye ideer'}
+              </span>
+            </div>
             <div className="flex justify-between items-start">
               <span className={`room-icon tone-${i % 4}`}>
                 <Icon size={23} />
@@ -74,6 +95,15 @@ export function RoomCards({ limit }: { limit?: number }) {
                   : 'Sett budsjett'}
               </span>
             </div>
+            <p className="room-next">
+              {next ? (
+                <>
+                  <strong>Neste steg:</strong> {next.title}
+                </>
+              ) : (
+                'Finn uttrykket. Lag en plan. Skap rommet.'
+              )}
+            </p>
           </Link>
         )
       })}

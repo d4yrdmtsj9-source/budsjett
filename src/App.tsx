@@ -13,6 +13,8 @@ import { SuppliersPage } from '@/pages/SuppliersPage'
 import { SupplierDetailPage } from '@/pages/SupplierDetailPage'
 import { RoomsPage } from '@/pages/RoomsPage'
 import { SettingsPage } from '@/pages/SettingsPage'
+import { InspirationPage } from '@/pages/InspirationPage'
+import { PlanningPage } from '@/pages/PlanningPage'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -35,6 +37,8 @@ export default function App() {
                   <Route element={<AppLayout />}>
                     <Route index element={<DashboardPage />} />
                     <Route path="rom" element={<RoomsPage />} />
+                    <Route path="inspo" element={<InspirationPage />} />
+                    <Route path="planlegg" element={<PlanningPage />} />
                     <Route path="rom/:roomId" element={<RoomDetailPage />} />
                     <Route path="utgifter" element={<ExpensesPage />} />
                     <Route path="leverandorer" element={<SuppliersPage />} />

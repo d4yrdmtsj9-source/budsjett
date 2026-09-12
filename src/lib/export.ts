@@ -1,3 +1,4 @@
+import { validPlanningData } from './planning'
 import type { Expense } from './types'
 import type { LocalProject } from './localStore'
 import { readReceipt, saveReceipt, normalizeProject } from './localStore'
@@ -59,6 +60,19 @@ export function exportCSV(expenses: Expense[]) {
 }
 export async function exportBackup(project: LocalProject) {
   const files: Record<string, string> = {}
+  const imageIds = (project.inspirations ?? [])
+    .flatMap((i) => [i.image_id, i.before_image_id])
+    .filter((id): id is string => !!id)
+  for (const id of imageIds) {
+    const blob = await readReceipt(id)
+    if (blob)
+      files[id] = await new Promise<string>((resolve, reject) => {
+        const r = new FileReader()
+        r.onload = () => resolve(String(r.result))
+        r.onerror = reject
+        r.readAsDataURL(blob)
+      })
+  }
   for (const expense of project.expenses)
     for (const ref of expense.receipts ?? []) {
       const blob = await readReceipt(ref.id)
@@ -127,9 +141,16 @@ export async function parseBackup(
     )
   )
     throw new Error('Sikkerhetskopien har ugyldige rom eller personer.')
+  if (!validPlanningData(data))
+    throw new Error('Sikkerhetskopien har ugyldige ideer eller oppgaver.')
   const allowedIds = new Set<string>(
     data.expenses.flatMap((e: Expense) => (e.receipts ?? []).map((r) => r.id)),
   )
+  for (const idea of data.inspirations ?? []) {
+    if (typeof idea.image_id === 'string') allowedIds.add(idea.image_id)
+    if (typeof idea.before_image_id === 'string')
+      allowedIds.add(idea.before_image_id)
+  }
   for (const [id, value] of Object.entries(data.local_receipt_files ?? {})) {
     if (
       !allowedIds.has(id) ||

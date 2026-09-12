@@ -5,12 +5,15 @@ import {
   ReceiptText,
   Ellipsis,
   ArrowUpRight,
+  CalendarCheck,
+  Sparkles,
 } from 'lucide-react'
 import { useExpenseSheet } from '@/hooks/useExpenseSheet'
 const items = [
   { to: '/', icon: LayoutDashboard, label: 'Oversikt' },
-  { to: '/rom', icon: House, label: 'Rom' },
+  { to: '/planlegg', icon: CalendarCheck, label: 'Planlegg' },
   { to: '/utgifter', icon: ReceiptText, label: 'Kjøp' },
+  { to: '/inspo', icon: Sparkles, label: 'Inspo' },
   { to: '/innstillinger', icon: Ellipsis, label: 'Mer' },
 ]
 export function BottomNav() {

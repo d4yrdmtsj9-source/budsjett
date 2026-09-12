@@ -53,3 +53,17 @@ Den lokale nettleserforhåndsvisningen var utilgjengelig i utviklingsmiljøet. D
 ## Utrulling
 
 Arbeidet leveres på en egen gren. GitHub Pages-workflowen publiserer ved push til `main`, så sammenslåing er også publisering. Workflowen og eksisterende skykonfigurasjon er ikke endret i denne oppgraderingen.
+
+## Inspo og planlegging
+
+Ny navigasjon: Oversikt, Planlegg, Kjøp, Inspo og Mer. Rom finnes fortsatt i oversikten og på egen URL.
+
+Inspo samler egne bilder, fargepaletter, notater, produktlenker, prisanslag og personlige favoritter. Statusene er ønskeliste, valgt og ferdig. To ideer kan sammenlignes med prisforskjell og et tydelig betinget regneeksempel på sluttprognosen. Ideer endrer ikke budsjettet automatisk. En idé kan opprette én tilknyttet oppgave under Planlegg.
+
+Planlegg inneholder oppgaver med rom, ansvarlig person, måldato, notater, status og milepæler. Fremdriften er antall fullførte oppgaver delt på antall oppgaver i valgt romutvalg, ikke et anslag på tid eller gjenstående kostnad. Før- og etterbilder ligger på hver idé. Romkort bruker valgt inspirasjon som omslag, eller første idé når ingen er valgt.
+
+De nye prosjektfeltene `inspirations` og `tasks` er valgfrie. Poster flettes per ID og tidsstempel; favorittstemmer flettes separat per person. Sletting bruker tidsstemplet slettemarkering. Gamle snapshots uten feltene sletter ikke nye ideer/oppgaver ved fletting i ny klient. Alle enheter bør oppdateres før bruk; gamle klienter kan fortsatt mangle den nye flettelogikken.
+
+Bilder komprimeres lokalt til JPEG med maksimalt 1400 piksler på lengste side. Metadata fjernes ved ny koding. Bildene lagres i IndexedDB og inkluderes i JSON-backup fra enheten de ligger på; filinnholdet synkroniseres ikke automatisk til partnerens enhet. Det finnes ingen bildeinnhenting fra lenker, Pinterest-import eller AI-bildegenerering i appen. De innebygde stilforslagene er redigerbare farge- og materialillustrasjoner, ikke fotografier eller produktanbefalinger.
+
+Fem nye tester kontrollerer fletting av oppgaver, slettemarkeringer, uavhengige favorittstemmer, gamle snapshots, importvalidering og lenkesikkerhet. Totalt 21 tester.
