@@ -65,3 +65,12 @@ på enheten og følger ikke prosjektet til andre deltakere. Bilder og
 materialprøver beholder sine originale farger. Tema lastes før React for
 å unngå lys oppstart i mørk modus. `public/theme.js` er derfor med hensikt
 et vanlig, blokkerende skript som kopieres til produksjonsbygget.
+
+### Slette kategorier
+
+Under Mer → Organiser prosjektet → Kategorier kan du slette en kategori
+med søppelbøtten. Bekreftelsen viser antall berørte kjøp. Kjøpene blir uten
+kategori og beholder beløp, betalinger og vedlegg. Kategorien skjules fra
+alle kategorivalg. En slettemarkering hindrer at den gjenopprettes ved
+synkronisering; alle enheter bør laste inn den oppdaterte appen. En ny
+kategori med samme navn kan opprettes uten å koble til de gamle kjøpene.
