@@ -4,6 +4,7 @@ import {
   Moon,
   Sun,
   Monitor,
+  Trash2,
   Copy,
   Check,
   Download,
@@ -39,7 +40,7 @@ export function SettingsPage() {
   } = useProject()
   const { signOut, memberId, updateDisplayName } = useAuth()
   const { expenses } = useExpenses()
-  const { data: categories, createCategory } = useCategories()
+  const { data: categories, createCategory, deleteCategory } = useCategories()
   const [name, setName] = useState(project?.name ?? '')
   const [budget, setBudget] = useState(project?.total_budget ?? 0)
   const [reserve, setReserve] = useState(project?.reserve_amount ?? 0)
@@ -420,9 +421,36 @@ export function SettingsPage() {
           <h3 className="mt-5">Kategorier</h3>
           <div className="flex flex-wrap gap-2 mt-3">
             {categories?.map((c) => (
-              <span className="mini-badge" key={c.id}>
-                {c.name}
-              </span>
+              <div
+                className="flex items-center gap-1 rounded-xl border border-border pl-3 text-sm"
+                key={c.id}
+              >
+                <span>{c.name}</span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  disabled={busy}
+                  aria-label={`Slett kategorien ${c.name}`}
+                  onClick={() => {
+                    const count = expenses.filter(
+                      (e) => e.category_id === c.id,
+                    ).length
+                    if (
+                      !window.confirm(
+                        `Slette kategorien «${c.name}»? ${count > 0 ? `${count} kjøp beholder alle beløp og vedlegg, men blir uten kategori.` : 'Ingen kjøp blir slettet.'}`,
+                      )
+                    )
+                      return
+                    void perform(
+                      () => deleteCategory.mutateAsync(c.id),
+                      'Kategorien er slettet. Kjøpene er beholdt.',
+                    )
+                  }}
+                >
+                  <Trash2 size={16} />
+                </Button>
+              </div>
             ))}
           </div>
           <form

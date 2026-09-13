@@ -38,7 +38,7 @@ export function useExpenses(filters: ExpenseFilters = {}) {
           (r) => r.id === e.room_id && !r.deleted_at,
         ) as Expense['room'],
         category: rawProject.categories.find(
-          (c) => c.id === e.category_id,
+          (c) => c.id === e.category_id && !c.deleted_at,
         ) as Expense['category'],
       }))
       .filter(

@@ -69,6 +69,7 @@ export interface LocalRoom {
 }
 
 export interface LocalCategory {
+  deleted_at?: string | null
   updated_at?: string
   id: string
   name: string
@@ -172,7 +173,38 @@ export function normalizeMember(m: LocalMember): LocalMember {
   }
 }
 
+/** A deleted category never removes purchases or changes their financial data. */
+export function detachDeletedCategories(project: LocalProject): LocalProject {
+  const deleted = new Set(
+    project.categories.filter((c) => c.deleted_at).map((c) => c.id),
+  )
+  return {
+    ...project,
+    expenses: project.expenses.map((e) =>
+      e.category_id && deleted.has(e.category_id)
+        ? { ...e, category_id: null }
+        : e,
+    ),
+  }
+}
+
+export function deleteProjectCategory(
+  project: LocalProject,
+  id: string,
+): LocalProject {
+  const now = new Date().toISOString()
+  return detachDeletedCategories({
+    ...project,
+    categories: project.categories.map((c) =>
+      c.id === id && !c.deleted_at
+        ? { ...c, deleted_at: now, updated_at: now }
+        : c,
+    ),
+  })
+}
+
 export function normalizeProject(project: LocalProject): LocalProject {
+  project = detachDeletedCategories(project)
   return {
     ...project,
     schema_version: 2,

@@ -5,7 +5,7 @@ import type {
   LocalProject,
   LocalRoom,
 } from './localStore.ts'
-import { normalizeMember } from './localStore.ts'
+import { normalizeMember, detachDeletedCategories } from './localStore.ts'
 import { mergeRecords, mergeInspirations } from './planning.ts'
 
 function stamp(value: string | null | undefined): number {
@@ -76,6 +76,11 @@ function mergeCategories(
   for (const cat of first) map.set(cat.id, cat)
   for (const cat of second) {
     const prev = map.get(cat.id)
+    // Deletion wins even when an offline device later renames the old category.
+    if (prev && !!prev.deleted_at !== !!cat.deleted_at) {
+      map.set(cat.id, cat.deleted_at ? cat : prev)
+      continue
+    }
     if (!prev || stamp(cat.updated_at) > stamp(prev.updated_at))
       map.set(cat.id, cat)
   }
@@ -114,7 +119,7 @@ export function mergeProjects(
 ): LocalProject {
   const preferCloud = stamp(cloud.updated_at) >= stamp(local.updated_at)
   const base = preferCloud ? cloud : local
-  return {
+  return detachDeletedCategories({
     ...base,
     inspirations: mergeInspirations(local.inspirations, cloud.inspirations),
     tasks: mergeRecords(local.tasks, cloud.tasks),
@@ -133,7 +138,7 @@ export function mergeProjects(
       stamp(local.updated_at) >= stamp(cloud.updated_at)
         ? local.updated_at
         : cloud.updated_at,
-  }
+  })
 }
 
 export function projectFingerprint(project: LocalProject): string {
