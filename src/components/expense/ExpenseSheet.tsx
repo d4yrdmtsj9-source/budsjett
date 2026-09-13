@@ -769,7 +769,7 @@ function ExpenseForm() {
       {error && (
         <p
           role="alert"
-          className="rounded-xl bg-red-50 p-3 text-sm text-destructive"
+          className="rounded-xl bg-destructive/10 p-3 text-sm text-destructive"
         >
           {error}
         </p>

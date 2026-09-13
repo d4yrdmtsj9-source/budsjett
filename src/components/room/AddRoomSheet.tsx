@@ -64,7 +64,7 @@ export function AddRoomSheet({
               key={s}
               type="button"
               onClick={() => setName(s)}
-              className="rounded-full border border-border bg-white/70 px-3 py-1.5 text-xs font-medium text-foreground/80 hover:border-primary/40 hover:text-primary"
+              className="rounded-full border border-border bg-surface-elevated/70 px-3 py-1.5 text-xs font-medium text-foreground/80 hover:border-primary/40 hover:text-primary"
             >
               {s}
             </button>

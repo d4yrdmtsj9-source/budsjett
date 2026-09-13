@@ -13,7 +13,7 @@ export function Card({ children, className, onClick, padding = 'md' }: CardProps
     <div
       onClick={onClick}
       className={cn(
-        'rounded-2xl bg-white/70 backdrop-blur-sm border border-white/80 shadow-sm',
+        'rounded-2xl bg-surface-elevated/70 backdrop-blur-sm border border-border shadow-sm',
         {
           'p-3': padding === 'sm',
           'p-4': padding === 'md',

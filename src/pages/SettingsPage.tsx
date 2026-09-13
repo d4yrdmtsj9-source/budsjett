@@ -1,6 +1,9 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
+  Moon,
+  Sun,
+  Monitor,
   Copy,
   Check,
   Download,
@@ -13,6 +16,7 @@ import {
   Plus,
 } from 'lucide-react'
 import { toast } from 'sonner'
+import { useTheme, type ThemePreference } from '@/hooks/useTheme'
 import { useProject } from '@/hooks/useProject'
 import { useAuth } from '@/hooks/useAuth'
 import { useExpenses } from '@/hooks/useExpenses'
@@ -23,6 +27,7 @@ import { MoneyInput } from '@/components/ui/MoneyInput'
 import { exportBackup, parseBackup, exportCSV, printBudget } from '@/lib/export'
 import { formatNOK } from '@/lib/format'
 export function SettingsPage() {
+  const { preference, setPreference } = useTheme()
   const {
     project,
     rawProject,
@@ -68,6 +73,39 @@ export function SettingsPage() {
           <p>Budsjett, samarbeid og dokumentasjon.</p>
         </div>
       </header>
+      <section className="settings-card appearance-card">
+        <div className="section-heading">
+          <h2>Lys etter stemningen.</h2>
+          <Moon size={21} />
+        </div>
+        <p className="text-sm text-muted mt-3">
+          Velg utseende på denne enheten. Automatisk følger telefonen eller
+          datamaskinen.
+        </p>
+        <div className="theme-options" role="group" aria-label="Utseende">
+          {(
+            [
+              { value: 'light', label: 'Lys', icon: Sun },
+              { value: 'dark', label: 'Mørk', icon: Moon },
+              { value: 'system', label: 'Automatisk', icon: Monitor },
+            ] satisfies {
+              value: ThemePreference
+              label: string
+              icon: typeof Sun
+            }[]
+          ).map(({ value, label, icon: Icon }) => (
+            <button
+              key={value}
+              type="button"
+              aria-pressed={preference === value}
+              onClick={() => setPreference(value)}
+            >
+              <Icon size={21} />
+              <span>{label}</span>
+            </button>
+          ))}
+        </div>
+      </section>
       <div className="settings-grid">
         <section className="settings-card">
           <div className="section-heading">
