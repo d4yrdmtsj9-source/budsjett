@@ -56,3 +56,12 @@ VITE_LOCAL_ONLY=true
 Testskriptet bruker Nodes innebygde testkjører og TypeScript-stripping. Produksjonsbygg kontrolleres av TypeScript og Vite. Ingen nye pakkeavhengigheter er lagt til i denne oppgraderingen.
 
 Se [oppgraderingsnotatene](docs/upgrade-notes.md) for datamodell, beregninger og gjenstående akseptansetester.
+
+### Utseende
+
+Velg Lys, Mørk eller Automatisk under Mer → «Lys etter stemningen».
+Automatisk følger systemets fargevalg og er standard. Valget lagres lokalt
+på enheten og følger ikke prosjektet til andre deltakere. Bilder og
+materialprøver beholder sine originale farger. Tema lastes før React for
+å unngå lys oppstart i mørk modus. `public/theme.js` er derfor med hensikt
+et vanlig, blokkerende skript som kopieres til produksjonsbygget.

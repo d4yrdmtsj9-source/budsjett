@@ -1,5 +1,6 @@
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { useTheme } from '@/hooks/useTheme'
 import { Toaster } from 'sonner'
 import { AuthProvider } from '@/hooks/useAuth'
 import { ProjectProvider } from '@/hooks/useProject'
@@ -26,6 +27,7 @@ const queryClient = new QueryClient({
 })
 
 export default function App() {
+  const { resolved } = useTheme()
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
@@ -53,6 +55,7 @@ export default function App() {
               </AuthGate>
             </HashRouter>
             <Toaster
+              theme={resolved}
               position="top-center"
               toastOptions={{
                 className: 'font-body',

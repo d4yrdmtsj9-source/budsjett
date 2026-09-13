@@ -19,7 +19,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
           'active:scale-[0.98]',
           {
             'bg-primary text-primary-foreground shadow-sm hover:bg-primary-dark': variant === 'primary',
-            'bg-white border border-border text-foreground hover:bg-surface': variant === 'secondary',
+            'bg-surface-elevated border border-border text-foreground hover:bg-surface': variant === 'secondary',
             'hover:bg-black/5 text-foreground': variant === 'ghost',
             'bg-destructive text-white hover:opacity-90': variant === 'destructive',
           },
