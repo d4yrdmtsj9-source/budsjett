@@ -74,3 +74,13 @@ kategori og beholder beløp, betalinger og vedlegg. Kategorien skjules fra
 alle kategorivalg. En slettemarkering hindrer at den gjenopprettes ved
 synkronisering; alle enheter bør laste inn den oppdaterte appen. En ny
 kategori med samme navn kan opprettes uten å koble til de gamle kjøpene.
+
+### Enkel Inspo
+
+Inspo viser nå et kompakt moodboard som hovedbilde og et galleri med flere
+bilder. Trykk på et bilde for fullskjerm, bla med pilene og velg «Bruk som
+hovedbilde». Du kan laste opp flere bilder samtidig og filtrere på rom.
+Beskrivelser, priser, stemmer, sammenligning og stilforslag vises ikke lenger.
+Eksisterende bildefiler (og tidligere førbilder) beholdes; øvrige eldre
+idéopplysninger blir liggende i prosjektdata og sikkerhetskopier.
+Bildene lagres fortsatt lokalt på enheten og inngår i sikkerhetskopien.
