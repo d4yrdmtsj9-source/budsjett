@@ -3,10 +3,12 @@ import { readReceipt } from '@/lib/localStore'
 export function IdeaImage({
   id,
   alt,
+  plainFallback = false,
   colors = ['#d3c6b4', '#9c8871', '#504637'],
 }: {
   id?: string | null
   alt: string
+  plainFallback?: boolean
   colors?: string[]
 }) {
   const [url, setUrl] = useState<{ id: string; url: string } | null>(null)
@@ -29,6 +31,12 @@ export function IdeaImage({
   }, [id])
   if (id && url?.id === id)
     return <img src={url.url} alt={alt} loading="lazy" />
+  if (plainFallback)
+    return (
+      <div className="gallery-unavailable">
+        Bildet er ikke tilgjengelig på denne enheten
+      </div>
+    )
   return (
     <div
       className="material-art"
