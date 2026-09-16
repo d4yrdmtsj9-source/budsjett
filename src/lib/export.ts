@@ -60,9 +60,13 @@ export function exportCSV(expenses: Expense[]) {
 }
 export async function exportBackup(project: LocalProject) {
   const files: Record<string, string> = {}
-  const imageIds = (project.inspirations ?? [])
-    .flatMap((i) => [i.image_id, i.before_image_id])
-    .filter((id): id is string => !!id)
+  const imageIds = [
+    ...project.rooms.map((r) => r.moodboard_image_id),
+    ...(project.inspirations ?? []).flatMap((i) => [
+      i.image_id,
+      i.before_image_id,
+    ]),
+  ].filter((id): id is string => !!id)
   for (const id of imageIds) {
     const blob = await readReceipt(id)
     if (blob)
@@ -134,10 +138,17 @@ export async function parseBackup(
         typeof m.id !== 'string' || typeof m.display_name !== 'string',
     ) ||
     data.rooms.some(
-      (r: { id: string; name: string; budget: number }) =>
+      (r: {
+        id: string
+        name: string
+        budget: number
+        moodboard_image_id?: unknown
+      }) =>
         typeof r.id !== 'string' ||
         typeof r.name !== 'string' ||
-        !Number.isFinite(r.budget),
+        !Number.isFinite(r.budget) ||
+        (r.moodboard_image_id != null &&
+          typeof r.moodboard_image_id !== 'string'),
     )
   )
     throw new Error('Sikkerhetskopien har ugyldige rom eller personer.')
@@ -146,6 +157,10 @@ export async function parseBackup(
   const allowedIds = new Set<string>(
     data.expenses.flatMap((e: Expense) => (e.receipts ?? []).map((r) => r.id)),
   )
+  for (const room of data.rooms) {
+    if (typeof room.moodboard_image_id === 'string')
+      allowedIds.add(room.moodboard_image_id)
+  }
   for (const idea of data.inspirations ?? []) {
     if (typeof idea.image_id === 'string') allowedIds.add(idea.image_id)
     if (typeof idea.before_image_id === 'string')

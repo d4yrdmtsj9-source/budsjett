@@ -81,11 +81,11 @@ export function DashboardPage() {
         <Sparkles size={26} />
         <div>
           <strong>Hva drømmer dere om nå?</strong>
-          <span>Samle ideene. Finn deres stil. Se hjemmet ta form.</span>
+          <span>Ett moodboard for hvert rom.</span>
         </div>
         <div className="discovery-links">
-          <Link to="/inspo">
-            Utforsk inspo <ArrowUpRight size={16} />
+          <Link to="/moodboard">
+            Se moodboard <ArrowUpRight size={16} />
           </Link>
           <Link to="/planlegg">
             Se planen <ArrowUpRight size={16} />

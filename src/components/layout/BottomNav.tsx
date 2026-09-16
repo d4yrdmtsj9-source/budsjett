@@ -13,7 +13,7 @@ const items = [
   { to: '/', icon: LayoutDashboard, label: 'Oversikt' },
   { to: '/planlegg', icon: CalendarCheck, label: 'Planlegg' },
   { to: '/utgifter', icon: ReceiptText, label: 'Kjøp' },
-  { to: '/inspo', icon: Sparkles, label: 'Inspo' },
+  { to: '/moodboard', icon: Sparkles, label: 'Moodboard' },
   { to: '/innstillinger', icon: Ellipsis, label: 'Mer' },
 ]
 export function BottomNav() {

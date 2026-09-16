@@ -14,6 +14,7 @@ import { financials, roomPortion } from '@/lib/finance'
 import { formatNOK } from '@/lib/format'
 import { usePlanning } from '@/hooks/usePlanning'
 import { IdeaImage } from '@/components/inspiration/IdeaImage'
+import { roomMoodboard } from '@/lib/moodboard'
 import { palettePresets } from '@/lib/planning'
 export function RoomCards({ limit }: { limit?: number }) {
   const { data: rooms } = useRooms()
@@ -27,10 +28,7 @@ export function RoomCards({ limit }: { limit?: number }) {
           return part ? [part] : []
         })
         const f = financials(portions, room.budget)
-        const inspiration =
-          ideas.find(
-            (idea) => idea.room_id === room.id && idea.status === 'chosen',
-          ) ?? ideas.find((idea) => idea.room_id === room.id)
+        const moodboard = roomMoodboard(room, ideas)
         const next = tasks.find(
           (t) => t.room_id === room.id && t.status !== 'done',
         )
@@ -49,12 +47,12 @@ export function RoomCards({ limit }: { limit?: number }) {
           <Link to={`/rom/${room.id}`} key={room.id} className="room-card">
             <div className="room-cover">
               <IdeaImage
-                id={inspiration?.image_id}
+                id={moodboard}
                 alt={room.name}
-                colors={inspiration?.palette ?? palettePresets[i % 3].colors}
+                colors={palettePresets[i % 3].colors}
               />
               <span className="room-cover-label">
-                {inspiration?.title ?? 'Rom for nye ideer'}
+                {moodboard ? 'Moodboard' : 'Rom for nye ideer'}
               </span>
             </div>
             <div className="flex justify-between items-start">
