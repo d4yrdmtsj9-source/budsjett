@@ -235,7 +235,7 @@ export function PlanningPage() {
                   </div>
                   <div className="task-bottom">
                     {t.inspiration_id && (
-                      <Link to="/inspo">
+                      <Link to="/moodboard">
                         Se inspirasjon <ArrowUpRight size={12} />
                       </Link>
                     )}
@@ -263,11 +263,11 @@ export function PlanningPage() {
           </section>
         ))}
       </div>
-      <Link className="planning-inspo-link" to="/inspo">
+      <Link className="planning-inspo-link" to="/moodboard">
         <Sparkles size={24} />
         <div>
           <strong>Trenger planen litt inspirasjon?</strong>
-          <span>Finn fargene, materialene og detaljene dere liker.</span>
+          <span>Se moodboard for rommene.</span>
         </div>
         <ArrowUpRight size={22} />
       </Link>

@@ -1,4 +1,10 @@
-import { HashRouter, Routes, Route, Navigate } from 'react-router-dom'
+import {
+  HashRouter,
+  Routes,
+  Route,
+  Navigate,
+  useLocation,
+} from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useTheme } from '@/hooks/useTheme'
 import { Toaster } from 'sonner'
@@ -14,7 +20,7 @@ import { SuppliersPage } from '@/pages/SuppliersPage'
 import { SupplierDetailPage } from '@/pages/SupplierDetailPage'
 import { RoomsPage } from '@/pages/RoomsPage'
 import { SettingsPage } from '@/pages/SettingsPage'
-import { InspirationPage } from '@/pages/InspirationPage'
+import { MoodboardPage } from '@/pages/MoodboardPage'
 import { PlanningPage } from '@/pages/PlanningPage'
 
 const queryClient = new QueryClient({
@@ -39,7 +45,8 @@ export default function App() {
                   <Route element={<AppLayout />}>
                     <Route index element={<DashboardPage />} />
                     <Route path="rom" element={<RoomsPage />} />
-                    <Route path="inspo" element={<InspirationPage />} />
+                    <Route path="moodboard" element={<MoodboardPage />} />
+                    <Route path="inspo" element={<LegacyInspoRedirect />} />
                     <Route path="planlegg" element={<PlanningPage />} />
                     <Route path="rom/:roomId" element={<RoomDetailPage />} />
                     <Route path="utgifter" element={<ExpensesPage />} />
@@ -66,4 +73,9 @@ export default function App() {
       </AuthProvider>
     </QueryClientProvider>
   )
+}
+
+function LegacyInspoRedirect() {
+  const { search } = useLocation()
+  return <Navigate to={`/moodboard${search}`} replace />
 }

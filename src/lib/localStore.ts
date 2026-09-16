@@ -59,6 +59,7 @@ export interface LocalMember {
 }
 
 export interface LocalRoom {
+  moodboard_image_id?: string | null
   updated_at?: string
   id: string
   name: string

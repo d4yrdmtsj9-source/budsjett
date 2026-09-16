@@ -104,8 +104,8 @@ export function RoomDetailPage() {
         </div>
       </header>
       <div className="discovery-links">
-        <Link to={`/inspo?rom=${roomId}`}>
-          Inspirasjon til {room.name}{' '}
+        <Link to={`/moodboard?rom=${roomId}`}>
+          Moodboard for {room.name}{' '}
           <ArrowLeft size={14} className="rotate-180" />
         </Link>
         <Link to="/planlegg">Oppgaver og milepæler</Link>

@@ -84,3 +84,13 @@ Beskrivelser, priser, stemmer, sammenligning og stilforslag vises ikke lenger.
 Eksisterende bildefiler (og tidligere førbilder) beholdes; øvrige eldre
 idéopplysninger blir liggende i prosjektdata og sikkerhetskopier.
 Bildene lagres fortsatt lokalt på enheten og inngår i sikkerhetskopien.
+
+### Moodboard per rom
+
+Moodboard erstatter Inspo i menyen. Hvert rom har ett bilde som kan åpnes
+stort, byttes eller fjernes. Ingen galleri, beskrivelser eller ekstra
+inspo-funksjoner. Eksisterende valgt hovedbilde per rom brukes først,
+ellers det nyeste gamle bildet. Eldre bilder beholdes i sikkerhetskopier,
+men vises ikke som et galleri. Et fjernet moodboard forblir tomt.
+Nye moodboard-filer tas med ved eksport/import av sikkerhetskopi og brukes
+også på romkortene. Bildefilene lagres fortsatt på enheten.

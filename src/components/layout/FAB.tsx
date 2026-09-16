@@ -4,7 +4,7 @@ import { useExpenseSheet } from '@/hooks/useExpenseSheet'
 export function FAB() {
   const { openNew, isOpen } = useExpenseSheet()
   const { pathname } = useLocation()
-  return isOpen || ['/inspo', '/planlegg'].includes(pathname) ? null : (
+  return isOpen || ['/moodboard', '/planlegg'].includes(pathname) ? null : (
     <button
       className="add-fab"
       onClick={() => openNew({ status: 'purchased' })}

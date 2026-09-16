@@ -2894,3 +2894,43 @@ button:disabled {
     font-size: 12px;
   }
 }
+
+.moodboard-rooms {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+}
+.moodboard-room {
+  min-width: 0;
+  display: grid;
+  gap: 12px;
+  align-content: start;
+}
+.moodboard-room h2 {
+  font-size: 23px;
+}
+.moodboard-room .gallery-empty {
+  width: 100%;
+  height: 300px;
+}
+.moodboard-room .gallery-main {
+  height: 300px;
+}
+.moodboard-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+.moodboard-viewer[open] {
+  grid-template-rows: 60px minmax(0, 1fr);
+  padding-bottom: max(12px, env(safe-area-inset-bottom));
+}
+@media (max-width: 760px) {
+  .moodboard-rooms {
+    grid-template-columns: 1fr;
+  }
+  .moodboard-room .gallery-main,
+  .moodboard-room .gallery-empty {
+    height: 260px;
+  }
+}
