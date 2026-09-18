@@ -8,7 +8,6 @@ import {
   Check,
   Clock3,
   House,
-  Sparkles,
 } from 'lucide-react'
 import { useState } from 'react'
 import { useProject } from '@/hooks/useProject'
@@ -77,21 +76,6 @@ export function DashboardPage() {
           Planlegg noe nytt
         </Button>
       </header>
-      <section className="discovery-banner">
-        <Sparkles size={26} />
-        <div>
-          <strong>Hva drømmer dere om nå?</strong>
-          <span>Ett moodboard for hvert rom.</span>
-        </div>
-        <div className="discovery-links">
-          <Link to="/moodboard">
-            Se moodboard <ArrowUpRight size={16} />
-          </Link>
-          <Link to="/planlegg">
-            Se planen <ArrowUpRight size={16} />
-          </Link>
-        </div>
-      </section>
       <div className="dashboard-top">
         <FinancialOverview
           expenses={expenses}
