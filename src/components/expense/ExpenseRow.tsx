@@ -18,6 +18,13 @@ import {
   estimateDelta,
   pendingRefund,
 } from '@/lib/finance'
+import { Sheet } from '@/components/ui/Sheet'
+import { Button } from '@/components/ui/Button'
+import { Input } from '@/components/ui/Input'
+import { MoneyInput } from '@/components/ui/MoneyInput'
+import { Select } from '@/components/ui/Select'
+import { useProject } from '@/hooks/useProject'
+import { todayISO } from '@/lib/format'
 import { formatNOK } from '@/lib/format'
 import type { Expense } from '@/lib/types'
 export function ExpenseRow({
@@ -30,7 +37,12 @@ export function ExpenseRow({
   showCategory?: boolean
 }) {
   const { openEdit } = useExpenseSheet()
-  const { softDeleteExpense, duplicateExpense } = useExpenses()
+  const { softDeleteExpense, duplicateExpense, quickUpdate } = useExpenses()
+  const { members } = useProject()
+  const [payment, setPayment] = useState(false)
+  const [amount, setAmount] = useState(outstanding(expense))
+  const [date, setDate] = useState(todayISO())
+  const [payer, setPayer] = useState('common')
   const [menu, setMenu] = useState(false)
   const delta = estimateDelta(expense)
   return (
@@ -47,10 +59,12 @@ export function ExpenseRow({
               showCategory && expense.category?.name,
             ]
               .filter(Boolean)
-              .join(' · ') || 'Ingen butikk eller rom valgt'}
+              .join(' · ')}
           </p>
           <div className="expense-badges">
             <StatusBadge status={expense.status} />
+            {expense.delivery_status === 'received' && <span className="mini-badge">Mottatt</span>}
+            {paidAmount(expense) > netCost(expense) && !(expense.return_amount ?? 0) && <span className="mini-badge amber">Kontroller betalingene</span>}
             {expense.budget_included === false && (
               <span className="mini-badge">Alternativ · utenfor budsjett</span>
             )}
@@ -77,7 +91,7 @@ export function ExpenseRow({
             <span>
               {paidAmount(expense) > 0
                 ? `${formatNOK(paidAmount(expense))} betalt`
-                : 'Trykk for detaljer'}
+                : ''}
             </span>
           )}
         </div>
@@ -93,6 +107,9 @@ export function ExpenseRow({
       </div>
       {menu && (
         <div className="expense-menu">
+          {(expense.status === 'planned' || expense.status === 'quoted') && <button disabled={quickUpdate.isPending} onClick={() => quickUpdate.mutate({ id: expense.id, action: 'ordered' })}>Bestilt</button>}
+          {expense.delivery_status !== 'received' && expense.delivery_status !== 'not_required' && <button disabled={quickUpdate.isPending} onClick={() => quickUpdate.mutate({ id: expense.id, action: 'received' })}>Mottatt</button>}
+          {knownPrice(expense) && outstanding(expense) > 0 && <button onClick={() => { setAmount(outstanding(expense)); setPayment(true); setMenu(false) }}>Registrer betaling</button>}
           <button
             onClick={() => {
               setMenu(false)
@@ -123,6 +140,15 @@ export function ExpenseRow({
           </button>
         </div>
       )}
+      <Sheet open={payment} onClose={() => { if (!quickUpdate.isPending) setPayment(false) }} title="Registrer betaling">
+        <form className="space-y-4" onSubmit={async e => { e.preventDefault(); try { await quickUpdate.mutateAsync({ id: expense.id, action: 'payment', amount, payer, date }); setPayment(false) } catch { /* Mutation displays error */ } }}>
+          <p>{expense.description} · {formatNOK(outstanding(expense))} gjenstår</p>
+          <MoneyInput label="Beløp" value={amount} onChange={setAmount} />
+          <Input label="Betalingsdato" type="date" required value={date} onChange={e => setDate(e.target.value)} />
+          <Select label="Betalt fra" value={payer} onChange={e => setPayer(e.target.value)} options={[{ value: 'common', label: 'Felleskonto' }, ...members.map(m => ({ value: m.id, label: m.display_name ?? 'Person' }))]} />
+          <Button type="submit" disabled={quickUpdate.isPending}>Lagre betaling</Button>
+        </form>
+      </Sheet>
     </div>
   )
 }

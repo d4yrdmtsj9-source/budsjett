@@ -59,7 +59,7 @@ Se [oppgraderingsnotatene](docs/upgrade-notes.md) for datamodell, beregninger og
 
 ### Utseende
 
-Velg Lys, Mørk eller Automatisk under Mer → «Lys etter stemningen».
+Velg Lys, Mørk eller Automatisk under Mer → Utseende.
 Automatisk følger systemets fargevalg og er standard. Valget lagres lokalt
 på enheten og følger ikke prosjektet til andre deltakere. Bilder og
 materialprøver beholder sine originale farger. Tema lastes før React for
@@ -68,29 +68,38 @@ et vanlig, blokkerende skript som kopieres til produksjonsbygget.
 
 ### Slette kategorier
 
-Under Mer → Organiser prosjektet → Kategorier kan du slette en kategori
+Under Mer → Kategorier og leverandører kan du slette en kategori
 med søppelbøtten. Bekreftelsen viser antall berørte kjøp. Kjøpene blir uten
 kategori og beholder beløp, betalinger og vedlegg. Kategorien skjules fra
 alle kategorivalg. En slettemarkering hindrer at den gjenopprettes ved
 synkronisering; alle enheter bør laste inn den oppdaterte appen. En ny
 kategori med samme navn kan opprettes uten å koble til de gamle kjøpene.
 
-### Enkel Inspo
+### Planlegging og økonomi
 
-Inspo viser nå et kompakt moodboard som hovedbilde og et galleri med flere
-bilder. Trykk på et bilde for fullskjerm, bla med pilene og velg «Bruk som
-hovedbilde». Du kan laste opp flere bilder samtidig og filtrere på rom.
-Beskrivelser, priser, stemmer, sammenligning og stilforslag vises ikke lenger.
-Eksisterende bildefiler (og tidligere førbilder) beholdes; øvrige eldre
-idéopplysninger blir liggende i prosjektdata og sikkerhetskopier.
-Bildene lagres fortsatt lokalt på enheten og inngår i sikkerhetskopien.
+Menyen er Oversikt, Plan, Økonomi, Rom og Mer. Moodboard er ett bilde inne på
+hvert rom. Eldre bilde- og idédata beholdes for kompatibilitet og sikkerhetskopi.
 
-### Moodboard per rom
+Oppgaver kan ha prioritet, frist, ansvarlig, rekkefølge og avhengigheter til
+andre oppgaver og leverte innkjøp. Ferdige oppgaver er samlet i en lukket seksjon.
+Betalingsplanen fordeler faktiske nettobetalinger mot de tidligste forfallene;
+forfallene øker aldri forventet sluttkostnad. Rest uten plan vises uten dato.
+Bestilling, levering og betaling er separate handlinger.
 
-Moodboard erstatter Inspo i menyen. Hvert rom har ett bilde som kan åpnes
-stort, byttes eller fjernes. Ingen galleri, beskrivelser eller ekstra
-inspo-funksjoner. Eksisterende valgt hovedbilde per rom brukes først,
-ellers det nyeste gamle bildet. Eldre bilder beholdes i sikkerhetskopier,
-men vises ikke som et galleri. Et fjernet moodboard forblir tomt.
-Nye moodboard-filer tas med ved eksport/import av sikkerhetskopi og brukes
-også på romkortene. Bildefilene lagres fortsatt på enheten.
+Tidligere rammer vises i innstillinger. Endringshistorikken i en post kan hentes
+inn i skjemaet for kontroll før lagring. Historikk begrenses til 100 versjoner
+for hele prosjektet og 50 rammeendringer. Slettede poster kan gjenopprettes.
+
+Lokale endringer og innkommende synkronisering køes. Betalinger flettes per ID,
+og slettede betalinger beholder slettemarkering. Et åpent skjema avviser lagring
+hvis en nyere post allerede er mottatt. Dette er ikke en servertransaksjon:
+samtidige skyopplastinger og endringer fra eldre klienter er fortsatt en risiko.
+Alle enheter bør oppdateres samtidig.
+
+Kvitteringer og moodboard-filer er fortsatt lokale og inngår i sikkerhetskopien.
+Delt fillagring og autentisert tilgang er ikke implementert. Dagens løsning
+bruker fortsatt invitasjonskode; det kreves en egen backend-migrering for å erstatte den.
+
+Verifisering: 34 tester, TypeScript/produksjonsbygg og lint uten feil.
+Nettleser- og reell testing mellom to enheter gjenstår: lokal Chromium mangler,
+og nedlasting er blokkert av nettverksmiljøet. Dette leveres som utkast til PR.

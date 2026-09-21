@@ -1,3 +1,4 @@
+import { mergePayments } from './paymentRecords.ts'
 import type {
   LocalCategory,
   LocalExpense,
@@ -5,7 +6,7 @@ import type {
   LocalProject,
   LocalRoom,
 } from './localStore.ts'
-import { normalizeMember, detachDeletedCategories } from './localStore.ts'
+import { normalizeMember, normalizeExpense, detachDeletedCategories } from './localStore.ts'
 import { mergeRecords, mergeInspirations } from './planning.ts'
 
 function stamp(value: string | null | undefined): number {
@@ -94,8 +95,10 @@ function mergeExpenses(
   const map = new Map<string, LocalExpense>()
   for (const expense of [...local, ...cloud]) {
     const prev = map.get(expense.id)
-    if (!prev || stamp(expense.updated_at) >= stamp(prev.updated_at)) {
-      map.set(expense.id, expense)
+    if (!prev) map.set(expense.id, expense)
+    else {
+      const chosen = stamp(expense.updated_at) >= stamp(prev.updated_at) ? expense : prev
+      map.set(expense.id, { ...chosen, payments: mergePayments(prev.payments ?? normalizeExpense(prev).payments ?? [], expense.payments ?? normalizeExpense(expense).payments ?? [], prev.updated_at, expense.updated_at) })
     }
   }
   return [...map.values()]
@@ -119,8 +122,24 @@ export function mergeProjects(
 ): LocalProject {
   const preferCloud = stamp(cloud.updated_at) >= stamp(local.updated_at)
   const base = preferCloud ? cloud : local
+  const revisions = new Map<string, NonNullable<LocalProject['expense_history']>[number]>()
+  for (const h of [...(local.expense_history ?? []), ...(cloud.expense_history ?? [])]) revisions.set(h.id, h)
+  for (const e of local.expenses) {
+    const other = cloud.expenses.find(row => row.id === e.id)
+    if (other && JSON.stringify(e) !== JSON.stringify(other)) {
+      for (const version of [e, other]) {
+        const data = JSON.stringify(version)
+        let hash = 0; for (let n = 0; n < data.length; n++) hash = ((hash << 5) - hash + data.charCodeAt(n)) | 0
+        const id = `${version.id}:${version.updated_at}:${hash}`
+        revisions.set(id, { id, expense: version, date: version.updated_at })
+      }
+    }
+  }
   return detachDeletedCategories({
     ...base,
+    initial_budget: base.initial_budget ?? local.initial_budget ?? cloud.initial_budget,
+    budget_history: [...new Map([...(local.budget_history ?? []), ...(cloud.budget_history ?? [])].map(h => [h.id, h])).values()].sort((a,b) => a.date.localeCompare(b.date)).slice(-50),
+    expense_history: [...revisions.values()].sort((a,b) => a.date.localeCompare(b.date)).slice(-100),
     inspirations: mergeInspirations(local.inspirations, cloud.inspirations),
     tasks: mergeRecords(local.tasks, cloud.tasks),
     name: base.name,

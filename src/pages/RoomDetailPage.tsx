@@ -1,5 +1,6 @@
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Pencil } from 'lucide-react'
+import { MoodboardPage } from './MoodboardPage'
 import { useState } from 'react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/Button'
@@ -104,14 +105,13 @@ export function RoomDetailPage() {
         </div>
       </header>
       <div className="discovery-links">
-        <Link to={`/moodboard?rom=${roomId}`}>
-          Moodboard for {room.name}{' '}
-          <ArrowLeft size={14} className="rotate-180" />
-        </Link>
-        <Link to="/planlegg">Oppgaver og milepæler</Link>
+
+        <Link to={`/planlegg?rom=${roomId}`}>Oppgaver og milepæler</Link>
       </div>
 
+      <details className="work-details"><summary>Moodboard</summary><MoodboardPage roomId={roomId} /></details>
       <FinancialOverview
+        roomId={roomId}
         expenses={portions}
         budget={room.budget}
         scope="ROMBUDSJETT"

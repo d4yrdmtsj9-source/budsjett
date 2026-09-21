@@ -1,13 +1,13 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useSearchParams } from 'react-router-dom'
+import { useExpenses } from '@/hooks/useExpenses'
+import { useExpenseSheet } from '@/hooks/useExpenseSheet'
+import { sortTasks, taskBlockers } from '@/lib/workflow'
 import {
   Plus,
   Check,
   Flag,
-  ArrowUpRight,
   Circle,
-  CalendarDays,
-  Sparkles,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { usePlanning } from '@/hooks/usePlanning'
@@ -21,8 +21,9 @@ import { uid } from '@/lib/localStore'
 import { type ProjectTask } from '@/lib/planning'
 import { todayISO, formatDate } from '@/lib/format'
 const phases = [
-  { key: 'todo', label: 'Neste steg' },
-  { key: 'doing', label: 'I gang' },
+  { key: 'todo', label: 'Ikke startet' },
+  { key: 'doing', label: 'Pågår' },
+  { key: 'blocked', label: 'Blokkert' },
   { key: 'done', label: 'Ferdig' },
 ] as const
 const emptyTask = (): ProjectTask => ({
@@ -41,17 +42,20 @@ export function PlanningPage() {
   const { tasks, saveTask, patchTask } = usePlanning()
   const { data: rooms } = useRooms()
   const { members } = useProject()
-  const [room, setRoom] = useState('')
-  const [editing, setEditing] = useState<ProjectTask | null>(null)
+  const [params, setParams] = useSearchParams()
+  const room = params.get('rom') ?? ''
+  const { expenses } = useExpenses()
+  const { openEdit } = useExpenseSheet()
+  const setRoom = (value: string) => setParams(value ? { rom: value } : {})
+  const [editing, setEditing] = useState<ProjectTask | null>(() => tasks.find(t => t.id === params.get('oppgave')) ?? null)
   const [busy, setBusy] = useState(false)
-  const shown = tasks.filter((t) => !room || t.room_id === room)
+  const [period, setPeriod] = useState('all')
+  const today = todayISO()
+  const weekEnd = new Date(`${today}T12:00:00`)
+  weekEnd.setDate(weekEnd.getDate() + ((7 - weekEnd.getDay()) % 7))
+  const end = `${weekEnd.getFullYear()}-${String(weekEnd.getMonth()+1).padStart(2,'0')}-${String(weekEnd.getDate()).padStart(2,'0')}`
+  const shown = tasks.filter(t => (!room || t.room_id === room) && (period === 'all' || (period === 'overdue' && t.status !== 'done' && t.due_date && t.due_date < today) || (period === 'week' && t.due_date >= today && t.due_date <= end) || (period === 'later' && t.due_date > end) || (period === 'undated' && !t.due_date)))
   const completed = shown.filter((t) => t.status === 'done').length
-  const percent = shown.length
-    ? Math.round((completed / shown.length) * 100)
-    : 0
-  const milestones = shown
-    .filter((t) => t.milestone)
-    .sort((a, b) => (a.due_date || '9999').localeCompare(b.due_date || '9999'))
   const act = async (fn: () => Promise<unknown>, message?: string) => {
     try {
       await fn()
@@ -62,215 +66,32 @@ export function PlanningPage() {
   }
   return (
     <div className="planning-page">
-      <section className="planning-hero">
-        <div>
-          <p className="eyebrow">
-            <CalendarDays size={14} /> FRA DRØM TIL GJENNOMFØRT
-          </p>
-          <h1>
-            Små steg.
-            <br />
-            <em>Store forandringer.</em>
-          </h1>
-          <p>En plan med plass til både hverdagen og drømmene.</p>
-          <Button
-            onClick={() =>
-              setEditing({ ...emptyTask(), room_id: room || null })
-            }
-          >
-            <Plus size={17} /> Ny oppgave
-          </Button>
-        </div>
-        <div
-          className="progress-orbit"
-          style={{
-            background: `conic-gradient(#d7be89 ${percent}%, #ffffff20 0)`,
-          }}
-        >
-          <div>
-            <strong>
-              {percent}
-              <small>%</small>
-            </strong>
-            <span>
-              {completed} av {shown.length} steg ferdig
-            </span>
-            <Sparkles size={22} />
-          </div>
-        </div>
-      </section>
-      <div className="section-heading">
-        <div>
-          <p className="eyebrow">DERES VEI VIDERE</p>
-          <h2>Planen tar form.</h2>
-        </div>
-        <Select
-          label="Rom"
-          value={room}
-          onChange={(e) => setRoom(e.target.value)}
-          options={[
-            { value: '', label: 'Alle rom' },
-            ...rooms.map((r) => ({ value: r.id, label: r.name })),
-          ]}
-        />
-      </div>
-      {milestones.length > 0 && (
-        <section className="milestone-track" aria-label="Milepæler">
-          {milestones.map((t) => (
-            <button
-              key={t.id}
-              className={t.status === 'done' ? 'complete' : ''}
-              onClick={() => setEditing(t)}
-            >
-              <span className="milestone-dot">
-                {t.status === 'done' ? <Check size={18} /> : <Flag size={16} />}
-              </span>
-              <span>
-                <small>
-                  {t.due_date ? formatDate(t.due_date) : 'Dato kommer'}
-                </small>
-                <strong>{t.title}</strong>
-              </span>
+      <header className="page-heading"><div><h1>Plan</h1><p>{completed} av {shown.length} oppgaver ferdige</p></div>
+        <Button onClick={() => setEditing({ ...emptyTask(), room_id: room || null })}><Plus size={17} />Ny oppgave</Button>
+      </header>
+      <Select label="Rom" value={room} onChange={e => setRoom(e.target.value)} options={[{ value: '', label: 'Alle rom' }, ...rooms.map(r => ({ value: r.id, label: r.name }))]} />
+      <Select label="Frist" value={period} onChange={e => setPeriod(e.target.value)} options={[{value:'all',label:'Alle frister'},{value:'overdue',label:'Forfalt'},{value:'week',label:'Resten av denne uken'},{value:'later',label:'Senere'},{value:'undated',label:'Uten frist'}]} />
+      {phases.map(phase => {
+        const rows = shown.filter(t => t.status === 'done' ? phase.key === 'done' : taskBlockers(t, tasks, expenses).length ? phase.key === 'blocked' : t.status === phase.key).sort(sortTasks)
+        if (!rows.length) return null
+        const list = rows.map(t => {
+          const blockers = taskBlockers(t, tasks, expenses)
+          return <article className="work-task" key={t.id}>
+            <button className="task-check" aria-label={t.status === 'done' ? `Gjenåpne ${t.title}` : `Fullfør ${t.title}`} disabled={t.status !== 'done' && blockers.length > 0} onClick={() => void act(() => patchTask(t.id, { status: t.status === 'done' ? 'todo' : 'done' }))}>
+              {t.status === 'done' ? <Check size={19} /> : <Circle size={19} />}
             </button>
-          ))}
-        </section>
-      )}
-      {!tasks.length && (
-        <section className="planning-starters">
-          <h3>Hvor vil dere begynne?</h3>
-          <p>Velg et første steg og tilpass det til deres oppussing.</p>
-          <div>
-            {[
-              'Samle inspirasjon til kjøkkenet',
-              'Innhente tilbud fra håndverkere',
-              'Bestemme materialer og farger',
-              'Rommet er ferdig!',
-            ].map((title, i) => (
-              <button
-                key={title}
-                onClick={() =>
-                  setEditing({
-                    ...emptyTask(),
-                    title,
-                    milestone: i === 3,
-                    room_id: room || null,
-                  })
-                }
-              >
-                <Plus size={16} />
-                {title}
-              </button>
-            ))}
-          </div>
-        </section>
-      )}
-      <div className="planning-columns">
-        {phases.map((phase) => (
-          <section className={`task-column phase-${phase.key}`} key={phase.key}>
-            <header>
-              <h3>{phase.label}</h3>
-              <span>{shown.filter((t) => t.status === phase.key).length}</span>
-            </header>
-            {shown
-              .filter((t) => t.status === phase.key)
-              .sort((a, b) =>
-                (a.due_date || '9999').localeCompare(b.due_date || '9999'),
-              )
-              .map((t) => (
-                <article className="task-card" key={t.id}>
-                  <div className="task-title">
-                    <button
-                      className={`task-check ${t.status === 'done' ? 'checked' : ''}`}
-                      aria-label={
-                        t.status === 'done'
-                          ? `Gjenåpne ${t.title}`
-                          : `Fullfør ${t.title}`
-                      }
-                      onClick={() =>
-                        void act(
-                          () =>
-                            patchTask(t.id, {
-                              status: t.status === 'done' ? 'todo' : 'done',
-                            }),
-                          t.status === 'done'
-                            ? 'Oppgaven er åpnet igjen'
-                            : t.milestone
-                              ? 'Milepæl nådd! Et steg nærmere drømmehjemmet.'
-                              : 'Et steg nærmere. Bra jobbet!',
-                        )
-                      }
-                    >
-                      {t.status === 'done' ? (
-                        <Check size={16} />
-                      ) : (
-                        <Circle size={17} />
-                      )}
-                    </button>
-                    <button onClick={() => setEditing(t)}>{t.title}</button>
-                    {t.milestone && <Flag size={15} />}
-                  </div>
-                  {t.notes && <p className="task-note">{t.notes}</p>}
-                  <div className="task-tags">
-                    <span>
-                      {rooms.find((r) => r.id === t.room_id)?.name ??
-                        'Hele hjemmet'}
-                    </span>
-                    {t.owner_id && (
-                      <span>
-                        {members.find((m) => m.id === t.owner_id)
-                          ?.display_name ?? 'Deltaker'}
-                      </span>
-                    )}
-                    {t.due_date && (
-                      <span
-                        className={
-                          t.due_date < todayISO() && t.status !== 'done'
-                            ? 'overdue'
-                            : ''
-                        }
-                      >
-                        {formatDate(t.due_date)}
-                      </span>
-                    )}
-                  </div>
-                  <div className="task-bottom">
-                    {t.inspiration_id && (
-                      <Link to="/moodboard">
-                        Se inspirasjon <ArrowUpRight size={12} />
-                      </Link>
-                    )}
-                    {t.status === 'todo' && (
-                      <button
-                        onClick={() =>
-                          void act(() => patchTask(t.id, { status: 'doing' }))
-                        }
-                      >
-                        Start oppgaven <ArrowUpRight size={14} />
-                      </button>
-                    )}
-                  </div>
-                </article>
-              ))}
-            {!shown.some((t) => t.status === phase.key) && (
-              <p className="column-empty">
-                {phase.key === 'done'
-                  ? 'Her samler dere fremgangen.'
-                  : phase.key === 'doing'
-                    ? 'Én ting av gangen er en god start.'
-                    : 'Plass til neste gode steg.'}
-              </p>
-            )}
-          </section>
-        ))}
-      </div>
-      <Link className="planning-inspo-link" to="/moodboard">
-        <Sparkles size={24} />
-        <div>
-          <strong>Trenger planen litt inspirasjon?</strong>
-          <span>Se moodboard for rommene.</span>
-        </div>
-        <ArrowUpRight size={22} />
-      </Link>
+            <button className="work-task-body" onClick={() => setEditing(t)}>
+              <strong>{t.priority && '↑ '}{t.title} {t.milestone && <Flag size={13} />}</strong>
+              <small>{[rooms.find(r => r.id === t.room_id)?.name, members.find(m => m.id === t.owner_id)?.display_name, t.due_date ? `${t.status !== 'done' && t.due_date < todayISO() ? 'Forfalt · ' : ''}${formatDate(t.due_date)}` : ''].filter(Boolean).join(' · ')}</small>
+              {blockers.length > 0 && t.status !== 'done' && <span className="work-warning">Venter på: {blockers.join(' · ')}</span>}
+            </button>
+            {t.status === 'todo' && !blockers.length && <Button size="sm" variant="secondary" onClick={() => void act(() => patchTask(t.id, { status: 'doing' }))}>Start</Button>}
+          </article>
+        })
+        return phase.key === 'done' ? <details key={phase.key} className="work-section"><summary>Ferdig ({rows.length})</summary>{list}</details>
+          : <section key={phase.key} className="work-section"><h2>{phase.label} <span className="text-muted">{rows.length}</span></h2>{list}</section>
+      })}
+      {!shown.length && <p className="plain-empty">Ingen oppgaver. Legg til en oppgave for å starte.</p>}
       {editing && (
         <Sheet
           open
@@ -283,8 +104,8 @@ export function PlanningPage() {
           }}
           title={
             tasks.some((t) => t.id === editing.id)
-              ? 'Rediger steg'
-              : 'Et nytt steg'
+              ? 'Rediger oppgave'
+              : 'Ny oppgave'
           }
         >
           <form
@@ -344,7 +165,7 @@ export function PlanningPage() {
               </div>
               <div className="form-two">
                 <Input
-                  label="Måldato (valgfritt)"
+                  label="Frist"
                   type="date"
                   value={editing.due_date}
                   onChange={(e) =>
@@ -352,7 +173,7 @@ export function PlanningPage() {
                   }
                 />
                 <Select
-                  label="Hvem tar steget?"
+                  label="Ansvarlig"
                   value={editing.owner_id ?? ''}
                   onChange={(e) =>
                     setEditing({ ...editing, owner_id: e.target.value || null })
@@ -366,6 +187,19 @@ export function PlanningPage() {
                   ]}
                 />
               </div>
+              <div className="form-two">
+                <label className="check-label"><input type="checkbox" checked={!!editing.priority} onChange={e => setEditing({ ...editing, priority: e.target.checked })} />Prioritert</label>
+                <Input label="Rekkefølge" type="number" value={editing.sort_order ?? 0} onChange={e => setEditing({ ...editing, sort_order: Number(e.target.value) })} />
+              </div>
+              {editing.status === 'blocked' && <Input label="Hva venter oppgaven på?" value={editing.blocked_reason ?? ''} onChange={e => setEditing({ ...editing, blocked_reason: e.target.value })} />}
+              <details className="work-details"><summary>Avhengigheter og innkjøp</summary>
+                <h3>Må være ferdig først</h3>
+                {tasks.filter(t => t.id !== editing.id).map(t => <label className="check-label" key={t.id}><input type="checkbox" checked={editing.depends_on?.includes(t.id) ?? false} onChange={e => setEditing({ ...editing, depends_on: e.target.checked ? [...(editing.depends_on ?? []), t.id] : editing.depends_on?.filter(id => id !== t.id) })} />{t.title}</label>)}
+                {(editing.depends_on ?? []).filter(id => !tasks.some(t => t.id === id)).map(id => <button type="button" key={id} className="text-link" onClick={() => setEditing({ ...editing, depends_on: editing.depends_on?.filter(x => x !== id) })}>Fjern kobling til slettet oppgave</button>)}
+                <h3>Nødvendige innkjøp</h3>
+                {expenses.map(e => <div key={e.id} className="flex items-center justify-between"><label className="check-label"><input type="checkbox" checked={editing.expense_ids?.includes(e.id) ?? false} onChange={event => setEditing({ ...editing, expense_ids: event.target.checked ? [...(editing.expense_ids ?? []), e.id] : editing.expense_ids?.filter(id => id !== e.id) })} />{e.description}</label><button type="button" className="text-link" onClick={() => openEdit(e)}>Åpne</button></div>)}
+                {(editing.expense_ids ?? []).filter(id => !expenses.some(e => e.id === id)).map(id => <button type="button" key={id} className="text-link" onClick={() => setEditing({ ...editing, expense_ids: editing.expense_ids?.filter(x => x !== id) })}>Fjern kobling til slettet kjøp</button>)}
+              </details>
               <label className="milestone-choice">
                 <input
                   type="checkbox"
@@ -388,7 +222,7 @@ export function PlanningPage() {
                 />
               </label>
               <Button type="submit" className="w-full">
-                {busy ? 'Lagrer …' : 'Lagre steg'}
+                {busy ? 'Lagrer …' : 'Lagre oppgave'}
               </Button>
               {tasks.some((t) => t.id === editing.id) && (
                 <Button
@@ -396,16 +230,16 @@ export function PlanningPage() {
                   variant="destructive"
                   className="w-full"
                   onClick={() => {
-                    if (window.confirm('Slette dette steget?'))
+                    if (window.confirm('Slette denne oppgaven?'))
                       void act(async () => {
                         await patchTask(editing.id, {
                           deleted_at: new Date().toISOString(),
                         })
                         setEditing(null)
-                      }, 'Steget er slettet')
+                      }, 'Oppgaven er slettet')
                   }}
                 >
-                  Slett steg
+                  Slett oppgave
                 </Button>
               )}
             </fieldset>

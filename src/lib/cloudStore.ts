@@ -1,4 +1,4 @@
-import { normalizeProject, type LocalProject } from '@/lib/localStore'
+import { loadProject, normalizeProject, type LocalProject } from '@/lib/localStore'
 import { mergeProjects, projectFingerprint } from '@/lib/mergeProjects'
 import { setCloudSyncStatus } from '@/lib/syncStatus'
 
@@ -55,7 +55,7 @@ export async function pullCloudProject(
   }
 }
 
-export async function pushCloudProject(
+async function pushSnapshot(
   project: LocalProject,
 ): Promise<boolean> {
   if (
@@ -92,7 +92,7 @@ export async function pushCloudProject(
         cache: 'no-store',
         body: JSON.stringify({ public_read: true }),
       })
-      setCloudSyncStatus('ok')
+      setCloudSyncStatus(pushTimers.has(project.id) ? 'pending' : 'ok')
       return true
     }
     setCloudSyncStatus('local-only')
@@ -103,19 +103,31 @@ export async function pushCloudProject(
   }
 }
 
-let pushTimer: ReturnType<typeof setTimeout> | null = null
-
+const pushQueues = new Map<string, Promise<boolean>>()
+const pushTimers = new Map<string, ReturnType<typeof setTimeout>>()
+/** Send snapshots in order and load the latest local edit before each send. */
+export function pushCloudProject(project: LocalProject): Promise<boolean> {
+  const task = (pushQueues.get(project.id) ?? Promise.resolve(false))
+    .catch(() => false)
+    .then(async () => {
+      const latest = await loadProject(project.id)
+      return pushSnapshot(latest ? mergeProjects(project, latest) : project)
+    })
+  pushQueues.set(project.id, task)
+  void task.finally(() => {
+    if (pushQueues.get(project.id) === task) pushQueues.delete(project.id)
+  }).catch(() => {})
+  return task
+}
 export function scheduleCloudPush(project: LocalProject) {
-  if (
-    project.invite_code.startsWith('DEMO-') ||
-    import.meta.env.VITE_LOCAL_ONLY === 'true'
-  )
-    return
+  if (project.invite_code.startsWith('DEMO-') || import.meta.env.VITE_LOCAL_ONLY === 'true') return
   setCloudSyncStatus('pending')
-  if (pushTimer) clearTimeout(pushTimer)
-  pushTimer = setTimeout(() => {
+  const timer = pushTimers.get(project.id)
+  if (timer) clearTimeout(timer)
+  pushTimers.set(project.id, setTimeout(() => {
+    pushTimers.delete(project.id)
     void pushCloudProject(project)
-  }, 600)
+  }, 600))
 }
 
 /** Merge local + cloud so two devices don't overwrite each other's rows. */

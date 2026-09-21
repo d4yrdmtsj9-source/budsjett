@@ -111,6 +111,9 @@ export interface LocalActivity {
 }
 
 export interface LocalProject {
+  initial_budget?: number
+  budget_history?: { id: string; amount: number; date: string }[]
+  expense_history?: { id: string; expense: LocalExpense; date: string }[]
   inspirations?: Inspiration[]
   tasks?: ProjectTask[]
   schema_version?: number
@@ -333,6 +336,7 @@ export function emptyProject(
     name,
     invite_code: invite,
     total_budget: budget,
+    initial_budget: budget,
     created_at: now,
     updated_at: now,
     members: [],
@@ -375,4 +379,26 @@ export async function saveReceipt(id: string, file: Blob) {
 }
 export async function readReceipt(id: string): Promise<Blob | null> {
   return idbGet<Blob>(`receipt:${id}`)
+}
+
+
+const projectWrites = new Map<string, Promise<unknown>>()
+/** Serialize local edits and incoming sync; Web Locks also coordinate browser tabs. */
+export async function mutateStoredProject(
+  projectId: string,
+  change: (current: LocalProject | null) => LocalProject | null,
+  touch = true,
+): Promise<LocalProject | null> {
+  const operation = async () => {
+    const run = async () => {
+      const next = change(await loadProject(projectId))
+      return next ? saveProject(next, { touch }) : null
+    }
+    return typeof navigator !== 'undefined' && navigator.locks
+      ? navigator.locks.request(`renover-write:${projectId}`, run)
+      : run()
+  }
+  const task = (projectWrites.get(projectId) ?? Promise.resolve()).catch(() => {}).then(operation)
+  projectWrites.set(projectId, task)
+  try { return await task } finally { if (projectWrites.get(projectId) === task) projectWrites.delete(projectId) }
 }

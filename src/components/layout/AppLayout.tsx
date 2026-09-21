@@ -1,13 +1,13 @@
 import { Outlet, Link } from 'react-router-dom'
 import { House, Check, CloudOff } from 'lucide-react'
 import { BottomNav } from './BottomNav'
-import { FAB } from './FAB'
 import { ExpenseSheet } from '@/components/expense/ExpenseSheet'
 import { useProject } from '@/hooks/useProject'
 import { useCloudSync } from '@/hooks/useCloudSync'
+import { pushCloudProject } from '@/lib/cloudStore'
 import { useAuth } from '@/hooks/useAuth'
 export function AppLayout() {
-  const { project } = useProject()
+  const { project, rawProject } = useProject()
   const { signOut } = useAuth()
   const sync = useCloudSync()
   const demo = project?.invite_code.startsWith('DEMO-')
@@ -33,11 +33,12 @@ export function AppLayout() {
             {demo
               ? 'Eksempel · kun på denne enheten'
               : sync.status === 'ok'
-                ? 'Lagret i skyen'
+                ? 'Prosjektdata synkronisert'
                 : sync.status === 'pending'
                   ? 'Synkroniserer …'
                   : 'Lagret på enheten'}
           </span>
+          {!demo && sync.status === 'local-only' && rawProject && <button className="text-link" onClick={() => void pushCloudProject(rawProject)}>Prøv synkronisering</button>}
         </header>
         {demo && (
           <div className="demo-banner">
@@ -49,7 +50,6 @@ export function AppLayout() {
           <Outlet />
         </main>
       </div>
-      <FAB />
       <ExpenseSheet />
     </div>
   )

@@ -2,7 +2,7 @@ const nokFormatter = new Intl.NumberFormat('nb-NO', {
   style: 'currency',
   currency: 'NOK',
   minimumFractionDigits: 0,
-  maximumFractionDigits: 0,
+  maximumFractionDigits: 2,
 })
 
 const nokFormatterPrecise = new Intl.NumberFormat('nb-NO', {

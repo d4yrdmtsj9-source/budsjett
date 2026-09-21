@@ -1,9 +1,9 @@
+import { mutateStoredProject } from '@/lib/localStore'
 import {
   createContext,
   useContext,
   useEffect,
   useState,
-  useRef,
   useCallback,
   type ReactNode,
 } from 'react'
@@ -30,7 +30,7 @@ import {
   pushCloudProject,
   scheduleCloudPush,
 } from '@/lib/cloudStore'
-import { mergeProjects, projectFingerprint } from '@/lib/mergeProjects'
+import { mergeProjects } from '@/lib/mergeProjects'
 
 export interface ProjectMemberView {
   id: string
@@ -133,33 +133,12 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   const { session, setSession } = useAuth()
   const [rawProject, setRaw] = useState<LocalProject | null>(null)
   const [loading, setLoading] = useState(true)
-  const writeQueue = useRef<Promise<void>>(Promise.resolve())
 
   // A cloud request can finish after a local edit. Merge against the latest
   // stored data inside the same queue used by local edits, not its old snapshot.
   const storeIncoming = useCallback(
     async (incoming: LocalProject | null, projectId: string) => {
-      let result: LocalProject | null = null
-      const task = writeQueue.current
-        .catch(() => {})
-        .then(async () => {
-          const latest = await loadProject(projectId)
-          result =
-            incoming?.id === projectId
-              ? latest
-                ? mergeProjects(latest, incoming)
-                : incoming
-              : latest
-          if (
-            result &&
-            (!latest ||
-              projectFingerprint(result) !== projectFingerprint(latest))
-          )
-            result = await saveProject(result, { touch: false })
-        })
-      writeQueue.current = task
-      await task
-      return result
+      return mutateStoredProject(projectId, latest => incoming?.id === projectId ? latest ? mergeProjects(latest, incoming) : incoming : latest, false)
     },
     [],
   )
@@ -228,21 +207,14 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     const projectId =
       typeof input === 'function' ? session?.projectId : input.id
     if (!projectId) throw new Error('Ingen prosjekt')
-    const task = writeQueue.current
-      .catch(() => {})
-      .then(async () => {
-        const current = await loadProject(projectId)
-        if (typeof input === 'function' && !current)
-          throw new Error('Prosjekt ikke funnet')
-        const saved = await saveProject(
-          typeof input === 'function' ? input(current!) : input,
-        )
-        setRaw(saved)
-        publishProject(saved)
-        scheduleCloudPush(saved)
-      })
-    writeQueue.current = task
-    await task
+    const saved = await mutateStoredProject(projectId, current => {
+      if (typeof input === 'function' && !current) throw new Error('Prosjekt ikke funnet')
+      return typeof input === 'function' ? input(current!) : input
+    })
+    if (!saved) throw new Error('Kunne ikke lagre prosjektet')
+    setRaw(saved)
+    publishProject(saved)
+    scheduleCloudPush(saved)
   }
 
   const createProject = async (
@@ -515,7 +487,12 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         ) > 0.001)
     )
       return { error: 'Fordelingen må bli 100 %' }
-    await setRawProject((p) => ({ ...p, ...updates }))
+    await setRawProject((p) => ({ ...p, ...updates,
+      ...(updates.total_budget !== undefined && updates.total_budget !== p.total_budget ? {
+        initial_budget: p.initial_budget ?? p.total_budget,
+        budget_history: [...(p.budget_history ?? []), { id: uid(), amount: p.total_budget, date: new Date().toISOString() }].slice(-50),
+      } : {}),
+    }))
     return { error: null }
   }
 
