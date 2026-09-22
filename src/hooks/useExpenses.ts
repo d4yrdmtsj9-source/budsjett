@@ -1,13 +1,16 @@
+import { stampPayments } from '@/lib/paymentRecords'
 import { useMemo } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { useProject } from './useProject'
 import { useAuth } from './useAuth'
-import { calculateTotal } from '@/lib/calc'
+import { calculateTotal, expenseToForm } from '@/lib/calc'
 import {
   validateExpense,
   isPlanned,
   paymentsOf,
+  outstanding,
+  money,
   knownPrice,
   applySelectedAlternative,
 } from '@/lib/finance'
@@ -89,11 +92,12 @@ export function useExpenses(filters: ExpenseFilters = {}) {
       !isPlanned(form) &&
       (previous.price_known ?? previous.total > 0)
         ? previous.total
-        : (form.original_estimate ?? null))
+        : (form.original_estimate ?? (isPlanned(form) && form.price_known !== false ? total : null)))
     return {
       ...previous,
       ...form,
       original_estimate: original,
+      payments: stampPayments(form.payments ?? [], previous?.payments ?? [], now),
       id: previous?.id ?? uid(),
       total,
       description: form.description.trim(),
@@ -126,15 +130,18 @@ export function useExpenses(filters: ExpenseFilters = {}) {
     mutationFn: async ({
       id,
       form,
+      expectedUpdatedAt,
     }: {
       id: string
       form: ExpenseFormData
       quiet?: boolean
+      expectedUpdatedAt?: string
     }) => {
       await setRawProject((p) => {
         const old = p.expenses.find((e) => e.id === id)
         if (!old || old.deleted_at)
           throw new Error('Posten er fjernet. Lukk og åpne listen igjen.')
+        if (expectedUpdatedAt && old.updated_at !== expectedUpdatedAt) throw new Error('Posten er endret på en annen enhet. Lukk og åpne posten før du lagrer igjen.')
         const e = saveForm(form, old)
         // Selecting one quote excludes the other uncommitted alternatives in its group.
         const rows = applySelectedAlternative(
@@ -142,7 +149,7 @@ export function useExpenses(filters: ExpenseFilters = {}) {
           e,
         )
         return activity(
-          { ...p, expenses: rows },
+          { ...p, expenses: rows, expense_history: [...(p.expense_history ?? []), { id: uid(), expense: old, date: new Date().toISOString() }].slice(-100) },
           `${displayName ?? 'Noen'} oppdaterte ${e.description}`,
         )
       })
@@ -205,6 +212,9 @@ export function useExpenses(filters: ExpenseFilters = {}) {
         description: `${expense.description} (kopi)`,
         status: 'planned' as const,
         payments: [],
+        payment_schedule: [],
+        delivery_status: undefined,
+        delivery_date: null,
         original_estimate: null,
         receipts: [],
         return_amount: 0,
@@ -248,7 +258,27 @@ export function useExpenses(filters: ExpenseFilters = {}) {
     },
     onError,
   })
+  const quickUpdate = useMutation({
+    mutationFn: async ({ id, action, amount, payer, date }: { id: string; action: 'ordered' | 'received' | 'payment'; amount?: number; payer?: string; date?: string }) => {
+      await setRawProject(p => {
+        const old = p.expenses.find(e => e.id === id && !e.deleted_at)
+        if (!old) throw new Error('Posten finnes ikke lenger.')
+        const form = expenseToForm(old as Expense)
+        if (action === 'ordered') { form.status = 'ordered'; form.budget_included = true }
+        if (action === 'received') { form.delivery_status = 'received'; if (isPlanned(form)) form.status = 'purchased'; form.budget_included = true }
+        if (action === 'payment') {
+          if (!amount || amount <= 0 || money(amount) > outstanding(old as Expense)) throw new Error('Beløpet må være større enn null og ikke overstige restbeløpet.')
+          if (isPlanned(form)) form.status = 'ordered'
+          form.budget_included = true
+          form.payments = [...paymentsOf(old as Expense), { id: uid(), amount: money(amount), kind: 'payment', paid_by: payer || null, date: date || todayISO() }]
+        }
+        const next = saveForm(form, old)
+        return activity({ ...p, expenses: applySelectedAlternative(p.expenses.map(e => e.id === id ? next : e), next), expense_history: [...(p.expense_history ?? []), { id: uid(), expense: old, date: new Date().toISOString() }].slice(-100) }, `${next.description} oppdatert`)
+      })
+    }, onError,
+  })
   return {
+    quickUpdate,
     data: expenses,
     expenses,
     isLoading: false,

@@ -14,7 +14,7 @@ export function useCloudSync() {
     status === 'pending'
       ? 'Lagrer…'
       : status === 'ok'
-        ? 'Lagret hos dere begge'
+        ? 'Prosjektdata synkronisert'
         : 'Kun på denne telefonen — eksporter under Innstillinger'
 
   return { status, label }

@@ -10,7 +10,7 @@ import { IdeaImage } from '@/components/inspiration/IdeaImage'
 import { storeIdeaImage } from '@/lib/ideaImages'
 import { roomMoodboard } from '@/lib/moodboard'
 
-export function MoodboardPage() {
+export function MoodboardPage({ roomId }: { roomId?: string }) {
   const { rawProject, setRawProject } = useProject()
   const { data: rooms } = useRooms()
   const [params, setParams] = useSearchParams()
@@ -19,7 +19,7 @@ export function MoodboardPage() {
   const upload = useRef<HTMLInputElement>(null)
   const targetRoom = useRef<string | null>(null)
   const dialog = useRef<HTMLDialogElement>(null)
-  const filter = params.get('rom') ?? ''
+  const filter = roomId ?? params.get('rom') ?? ''
   const shown = rooms.filter((r) => !filter || r.id === filter)
   const selected = rooms.find((r) => r.id === active)
   const selectedImage = selected
@@ -74,10 +74,10 @@ export function MoodboardPage() {
 
   return (
     <div className="simple-inspo">
-      <header className="gallery-heading">
+      {!roomId && <header className="gallery-heading">
         <h1>Moodboard</h1>
-      </header>
-      {rooms.length > 0 && (
+      </header>}
+      {!roomId && rooms.length > 0 && (
         <div className="gallery-room">
           <Select
             label="Rom"

@@ -1,3 +1,4 @@
+import { financials } from '@/lib/finance'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
@@ -26,7 +27,7 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { MoneyInput } from '@/components/ui/MoneyInput'
 import { exportBackup, parseBackup, exportCSV, printBudget } from '@/lib/export'
-import { formatNOK } from '@/lib/format'
+import { formatNOK, formatDate } from '@/lib/format'
 export function SettingsPage() {
   const { preference, setPreference } = useTheme()
   const {
@@ -41,6 +42,10 @@ export function SettingsPage() {
   const { signOut, memberId, updateDisplayName } = useAuth()
   const { expenses } = useExpenses()
   const { data: categories, createCategory, deleteCategory } = useCategories()
+  const initialBudget = rawProject?.initial_budget ?? project?.total_budget ?? 0
+  const initialVariance = financials(expenses).projected - initialBudget
+  const roomBudget = (rawProject?.rooms ?? []).filter(r => !r.deleted_at).reduce((n,r) => n + r.budget, 0)
+  const deletedExpenses = (rawProject?.expenses ?? []).filter(e => e.deleted_at)
   const [name, setName] = useState(project?.name ?? '')
   const [budget, setBudget] = useState(project?.total_budget ?? 0)
   const [reserve, setReserve] = useState(project?.reserve_amount ?? 0)
@@ -69,14 +74,12 @@ export function SettingsPage() {
     <div className="space-y-7">
       <header className="page-heading">
         <div>
-          <p className="eyebrow">RAMMENE RUNDT PROSJEKTET</p>
-          <h1>På deres premisser.</h1>
-          <p>Budsjett, samarbeid og dokumentasjon.</p>
+          <h1>Innstillinger</h1>
         </div>
       </header>
       <section className="settings-card appearance-card">
         <div className="section-heading">
-          <h2>Lys etter stemningen.</h2>
+          <h2>Utseende</h2>
           <Moon size={21} />
         </div>
         <p className="text-sm text-muted mt-3">
@@ -179,6 +182,15 @@ export function SettingsPage() {
               {formatNOK(Math.max(0, budget - reserve))} til planlagte arbeider.
               Resten holdes av til uforutsett.
             </p>
+            <div className="text-sm space-y-1 border-t border-border pt-3">
+              <p>Rombudsjetter: {formatNOK(roomBudget)}</p>
+              <p className={roomBudget + reserve > budget ? 'text-destructive' : 'text-muted'}>
+                {roomBudget + reserve > budget ? 'Over totalrammen: ' : 'Ufordelt ramme: '}{formatNOK(Math.abs(budget - reserve - roomBudget))}
+              </p>
+              <p>Første lagrede ramme: {formatNOK(initialBudget)}</p>
+              <p className={initialVariance > 0 ? 'text-destructive' : 'text-muted'}>Forventet sluttkostnad er {formatNOK(Math.abs(initialVariance))} {initialVariance > 0 ? 'over' : 'under'} første lagrede ramme.</p>
+              {!!rawProject?.budget_history?.length && <details><summary>Tidligere rammer</summary>{[...rawProject.budget_history].reverse().map(h => <p key={h.id}>{formatDate(h.date)} · {formatNOK(h.amount)}</p>)}</details>}
+            </div>
             {members.length === 2 && (
               <div className="space-y-2 border-t border-border pt-4">
                 <h3>Fordeling av private utlegg</h3>
@@ -203,7 +215,7 @@ export function SettingsPage() {
           </form>
         </section>
         <section className="settings-card">
-          <h2>Dere to, samme oversikt.</h2>
+          <h2>Deltakere</h2>
           <p className="text-sm text-muted mt-3">
             Åpne prosjektet på den andre telefonen med invitasjonskoden. Velg
             ditt eget navn når du bytter enhet.
@@ -327,7 +339,7 @@ export function SettingsPage() {
           </div>
         </section>
         <section className="settings-card">
-          <h2>Ta med oversikten.</h2>
+          <h2>Eksport og sikkerhetskopi</h2>
           <p className="text-sm text-muted mt-3 mb-5">
             Eksporter tallene, lag en utskrift eller ta en kopi av prosjektet.
           </p>
@@ -412,7 +424,7 @@ export function SettingsPage() {
           </p>
         </section>
         <section className="settings-card">
-          <h2>Organiser prosjektet.</h2>
+          <h2>Kategorier og leverandører</h2>
           <Link to="/leverandorer" className="settings-link">
             <Store size={19} />
             <span>Butikker og leverandører</span>
@@ -491,6 +503,16 @@ export function SettingsPage() {
           </div>
         </section>
       </div>
+      {!!deletedExpenses.length && <details className="settings-card">
+        <summary>Slettede poster ({deletedExpenses.length})</summary>
+        {deletedExpenses.map(e => <div className="work-row" key={e.id}>
+          <div><strong>{e.description}</strong><p className="text-xs text-muted">{formatNOK(e.total)} · {formatDate(e.deleted_at)}</p></div>
+          <Button variant="secondary" size="sm" disabled={busy} onClick={() => {
+            if (!window.confirm(`Gjenopprette «${e.description}» med beløp og betalinger i budsjettet?`)) return
+            void perform(() => setRawProject(p => ({...p, expenses: p.expenses.map(row => row.id === e.id && row.deleted_at ? {...row, deleted_at: null, updated_at: new Date().toISOString()} : row)})), 'Posten er gjenopprettet')
+          }}>Gjenopprett</Button>
+        </div>)}
+      </details>}
       <Button
         variant="ghost"
         onClick={() => {

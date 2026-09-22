@@ -12,10 +12,10 @@ import { useRooms } from '@/hooks/useRooms'
 import { useExpenses } from '@/hooks/useExpenses'
 import { financials, roomPortion } from '@/lib/finance'
 import { formatNOK } from '@/lib/format'
+import { sortTasks, taskBlockers } from '@/lib/workflow'
 import { usePlanning } from '@/hooks/usePlanning'
 import { IdeaImage } from '@/components/inspiration/IdeaImage'
 import { roomMoodboard } from '@/lib/moodboard'
-import { palettePresets } from '@/lib/planning'
 export function RoomCards({ limit }: { limit?: number }) {
   const { data: rooms } = useRooms()
   const { expenses } = useExpenses()
@@ -29,9 +29,7 @@ export function RoomCards({ limit }: { limit?: number }) {
         })
         const f = financials(portions, room.budget)
         const moodboard = roomMoodboard(room, ideas)
-        const next = tasks.find(
-          (t) => t.room_id === room.id && t.status !== 'done',
-        )
+        const next = tasks.filter(t => t.room_id === room.id && t.status !== 'done' && taskBlockers(t, tasks, expenses).length === 0).sort(sortTasks)[0]
         const Icon = /kjøkken/i.test(room.name)
           ? CookingPot
           : /bad/i.test(room.name)
@@ -45,16 +43,15 @@ export function RoomCards({ limit }: { limit?: number }) {
                   : House
         return (
           <Link to={`/rom/${room.id}`} key={room.id} className="room-card">
-            <div className="room-cover">
+            {moodboard && <div className="room-cover">
               <IdeaImage
                 id={moodboard}
                 alt={room.name}
-                colors={palettePresets[i % 3].colors}
               />
               <span className="room-cover-label">
                 {moodboard ? 'Moodboard' : 'Rom for nye ideer'}
               </span>
-            </div>
+            </div>}
             <div className="flex justify-between items-start">
               <span className={`room-icon tone-${i % 4}`}>
                 <Icon size={23} />
@@ -99,7 +96,7 @@ export function RoomCards({ limit }: { limit?: number }) {
                   <strong>Neste steg:</strong> {next.title}
                 </>
               ) : (
-                'Finn uttrykket. Lag en plan. Skap rommet.'
+                null
               )}
             </p>
           </Link>

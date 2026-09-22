@@ -2,7 +2,7 @@ export type CloudSyncStatus = 'pending' | 'ok' | 'local-only'
 
 type Listener = (status: CloudSyncStatus) => void
 
-let status: CloudSyncStatus = 'ok'
+let status: CloudSyncStatus = 'local-only'
 const listeners = new Set<Listener>()
 
 export function getCloudSyncStatus() {

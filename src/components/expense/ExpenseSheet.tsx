@@ -61,7 +61,7 @@ function ExpenseForm() {
     openNew,
   } = useExpenseSheet()
   const { createExpense, updateExpense, expenses } = useExpenses()
-  const { project, members } = useProject()
+  const { project, rawProject, members } = useProject()
   const { memberId } = useAuth()
   const { data: rooms } = useRooms()
   const { data: categories } = useCategories()
@@ -159,7 +159,7 @@ function ExpenseForm() {
     setBusy(true)
     try {
       if (editing)
-        await updateExpense.mutateAsync({ id: editing.id, form: next })
+        await updateExpense.mutateAsync({ id: editing.id, form: next, expectedUpdatedAt: editing.updated_at })
       else await createExpense.mutateAsync(next)
       toast.success('Posten er lagret')
       if (another)
@@ -182,11 +182,16 @@ function ExpenseForm() {
         void save()
       }}
     >
-      <p className="text-sm text-muted">
-        {editing
-          ? 'Endringer lagres når du trykker Lagre.'
-          : 'Start enkelt. Legg til detaljer når du trenger dem.'}
-      </p>
+      {editing && <details className="work-details"><summary>Endringshistorikk</summary>
+        {(rawProject?.expense_history ?? []).filter(h => h.expense.id === editing.id).slice().reverse().map(h => <div key={h.id} className="work-row"><span>{new Date(h.date).toLocaleString('nb-NO')} · {formatNOK(h.expense.total)} · betalt {formatNOK(paidAmount(h.expense as Expense))}</span><Button type="button" size="sm" variant="secondary" disabled={busy} onClick={() => {
+          if (!window.confirm('Hente denne versjonen inn i skjemaet? Kontroller beløp og betalinger før du lagrer.')) return
+          setForm({ ...expenseToForm(h.expense as Expense), payments: paymentsOf(h.expense as Expense) })
+          setPaidInFull(false)
+          setMore(true)
+          setError('')
+        }}>Hent versjon</Button></div>)}
+        {!(rawProject?.expense_history ?? []).some(h => h.expense.id === editing.id) && <p className="text-xs text-muted">Ingen tidligere versjoner lagret.</p>}
+      </details>}
       <fieldset disabled={busy} className="space-y-5">
         <Input
           label="Hva gjelder det?"
@@ -252,9 +257,7 @@ function ExpenseForm() {
             />{' '}
             Pris mangler ennå
           </label>
-          <p className="text-xs text-muted mt-2">
-            Alle beløp inkludert mva. En kjent pris på 0 kr regnes som gratis.
-          </p>
+          <p className="text-xs text-muted mt-2">Inkludert mva.</p>
         </div>
         {estimate != null && (
           <div className="notice">
@@ -273,7 +276,8 @@ function ExpenseForm() {
           </div>
         )}
         {!isPlanned(form) && (
-          <div className="form-section space-y-4">
+          <details className="form-section space-y-4" open={paidInFull || undefined}>
+            <summary className="cursor-pointer text-sm">Betaling, forfall og levering</summary>
             <div className="section-heading">
               <h3>Betaling</h3>
               <span className="text-sm text-muted">
@@ -390,13 +394,21 @@ function ExpenseForm() {
                 </Button>
               </>
             )}
-            <Input
-              label="Neste forfallsdato"
-              type="date"
-              value={form.due_date ?? ''}
-              onChange={(e) => update({ due_date: e.target.value || null })}
-            />
-          </div>
+            <details className="work-details"><summary>Betalingsplan</summary>
+              <p className="text-xs text-muted">Fordel hele avtaleprisen på forfall. Registrerte betalinger trekkes fra tidligste forfall.</p>
+              {!(form.payment_schedule?.length) && <Input label="Forfallsdato" type="date" value={form.due_date ?? ''} onChange={e => update({ due_date: e.target.value || null })} />}
+              {(form.payment_schedule ?? []).map((row, index) => <div className="payment-row space-y-3" key={row.id}>
+                <Input label={`Forfall ${index + 1}`} type="date" value={row.date} onChange={e => update({ payment_schedule: form.payment_schedule?.map(s => s.id === row.id ? { ...s, date: e.target.value } : s) })} />
+                <MoneyInput label="Beløp" value={row.amount} onChange={value => update({ payment_schedule: form.payment_schedule?.map(s => s.id === row.id ? { ...s, amount: value } : s) })} />
+                <Button type="button" variant="ghost" size="sm" onClick={() => update({ payment_schedule: form.payment_schedule?.filter(s => s.id !== row.id) })}>Fjern forfall</Button>
+              </div>)}
+              <Button type="button" variant="secondary" size="sm" onClick={() => update({ payment_schedule: [...(form.payment_schedule ?? []), { id: uid(), date: form.due_date ?? todayISO(), amount: Math.max(0, total - (form.payment_schedule ?? []).reduce((n,s) => n+s.amount, 0)), label: '' }] })}>Legg til forfall</Button>
+            </details>
+            <details className="work-details"><summary>Levering</summary>
+              <Select label="Leveringsstatus" value={form.delivery_status ?? 'waiting'} onChange={e => update({ delivery_status: e.target.value as ExpenseFormData['delivery_status'] })} options={[{ value: 'waiting', label: 'Venter på levering' }, { value: 'received', label: 'Mottatt' }, { value: 'not_required', label: 'Krever ikke levering' }]} />
+              <Input label="Forventet levering" type="date" value={form.delivery_date ?? ''} onChange={e => update({ delivery_date: e.target.value || null })} />
+            </details>
+          </details>
         )}
         <button
           type="button"

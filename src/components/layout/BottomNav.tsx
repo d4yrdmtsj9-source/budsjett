@@ -4,16 +4,14 @@ import {
   House,
   ReceiptText,
   Ellipsis,
-  ArrowUpRight,
   CalendarCheck,
-  Sparkles,
 } from 'lucide-react'
 import { useExpenseSheet } from '@/hooks/useExpenseSheet'
 const items = [
   { to: '/', icon: LayoutDashboard, label: 'Oversikt' },
-  { to: '/planlegg', icon: CalendarCheck, label: 'Planlegg' },
-  { to: '/utgifter', icon: ReceiptText, label: 'Kjøp' },
-  { to: '/moodboard', icon: Sparkles, label: 'Moodboard' },
+  { to: '/planlegg', icon: CalendarCheck, label: 'Plan' },
+  { to: '/utgifter', icon: ReceiptText, label: 'Økonomi' },
+  { to: '/rom', icon: House, label: 'Rom' },
   { to: '/innstillinger', icon: Ellipsis, label: 'Mer' },
 ]
 export function BottomNav() {
@@ -28,7 +26,7 @@ export function BottomNav() {
           <House size={22} />
         </span>
         <span>
-          Renover<span className="brand-caption">ROM FOR MULIGHETER</span>
+          Renover
         </span>
       </div>
       <div className="nav-items">
@@ -44,15 +42,7 @@ export function BottomNav() {
           </NavLink>
         ))}
       </div>
-      <div className="nav-note">
-        <span className="eyebrow">HJEMMET DITT. PLANEN DIN.</span>
-        <p>
-          Små valg.
-          <br />
-          Stor forandring.
-        </p>
-        <ArrowUpRight size={20} />
-      </div>
+
     </nav>
   )
 }

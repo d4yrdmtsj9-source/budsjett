@@ -12,9 +12,7 @@ export function RoomsPage() {
     <div className="space-y-7">
       <header className="page-heading">
         <div>
-          <p className="eyebrow">ETT ROM AV GANGEN</p>
-          <h1>Hjemmet tar form.</h1>
-          <p>Del opp prosjektet. Behold hele oversikten.</p>
+          <h1>Rom</h1>
         </div>
         <Button onClick={() => setOpen(true)}>
           <Plus size={17} />
@@ -26,8 +24,8 @@ export function RoomsPage() {
       ) : (
         <EmptyState
           icon={House}
-          title="Hvor vil du begynne?"
-          description="Kjøkken, bad eller hele uteområdet. Gi hver del sin egen ramme."
+          title="Ingen rom"
+          description="Legg til rommene som inngår i prosjektet."
           action={
             <Button onClick={() => setOpen(true)}>Legg til første rom</Button>
           }

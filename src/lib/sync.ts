@@ -1,6 +1,7 @@
 import { getSupabase } from '@/lib/supabase'
 import {
   loadProject,
+  mutateStoredProject,
   loadProjectByInvite,
   saveProject,
   type LocalProject,
@@ -54,9 +55,8 @@ async function connectProjectSync(
       if (!incoming?.id || !incoming.invite_code) return
       if (projectId !== 'pending' && incoming.id !== projectId) return
 
-      const local = await loadProject(incoming.id)
-      const merged = local ? mergeProjects(local, incoming) : incoming
-      await saveProject(merged, { touch: false })
+      const merged = await mutateStoredProject(incoming.id, local => local ? mergeProjects(local, incoming) : incoming, false)
+      if (!merged) return
       void pushCloudProject(merged)
       onUpdate(merged)
     })

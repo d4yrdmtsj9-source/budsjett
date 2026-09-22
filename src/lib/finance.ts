@@ -24,7 +24,7 @@ export function paymentsOf(e: Expense): Payment[] {
           },
         ]
       : [])
-  )
+  ).filter(p => !p.deleted_at)
 }
 export const paidAmount = (e: Expense) =>
   money(
@@ -92,6 +92,7 @@ export function roomPortion(e: Expense, roomId: string): Expense | null {
     ...e,
     total: portion(getExpenseTotal(e)),
     total_override: portion(getExpenseTotal(e)),
+    payment_schedule: e.payment_schedule?.map(s => ({ ...s, amount: portion(s.amount) })),
     payments: paymentsOf(e).map((p) => ({ ...p, amount: portion(p.amount) })),
     original_estimate:
       e.original_estimate == null ? null : portion(e.original_estimate),
@@ -157,7 +158,12 @@ export function validateExpense(form: ExpenseFormData): string | null {
   const total = calculateTotal(form)
   if ((form.return_amount ?? 0) > total)
     return 'Returbeløpet kan ikke være større enn kjøpet.'
-  const payments = form.payments ?? []
+  if (form.delivery_status && !['waiting', 'received', 'not_required'].includes(form.delivery_status)) return 'Ugyldig leveringsstatus.'
+  const schedule = form.payment_schedule ?? []
+  if (!Array.isArray(schedule) || schedule.some(s => !s.id || !Number.isFinite(s.amount) || s.amount <= 0 || !/^\d{4}-\d{2}-\d{2}$/.test(s.date))) return 'Fyll inn gyldig beløp og dato for hvert forfall.'
+  if (new Set(schedule.map(s => s.id)).size !== schedule.length) return 'Et forfall er registrert flere ganger.'
+  if (money(schedule.reduce((sum, s) => sum + s.amount, 0)) > total) return 'Betalingsplanen kan ikke overstige totalprisen.'
+  const payments = (form.payments ?? []).filter(p => !p.deleted_at)
   if (
     payments.some(
       (p) =>

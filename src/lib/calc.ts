@@ -1,3 +1,4 @@
+import { todayISO } from './format.ts'
 import type { Expense, ExpenseFormData } from './types'
 
 export function calculateSubtotal(quantity: number, unitPrice: number): number {
@@ -147,7 +148,7 @@ export function defaultExpenseForm(): ExpenseFormData {
     discount_percent: null,
     discount_amount: null,
     supplier: '',
-    expense_date: new Date().toISOString().split('T')[0],
+    expense_date: todayISO(),
     status: 'planned',
     who_paid: '',
     notes: '',
@@ -157,6 +158,7 @@ export function defaultExpenseForm(): ExpenseFormData {
 export function expenseToForm(expense: Expense): ExpenseFormData {
   return {
     ...expense,
+    payments: expense.payments?.filter(p => !p.deleted_at),
     description: expense.description,
     room_id: expense.room_id,
     category_id: expense.category_id,
@@ -168,7 +170,7 @@ export function expenseToForm(expense: Expense): ExpenseFormData {
     discount_amount: expense.discount_amount,
     supplier: expense.supplier ?? '',
     expense_date:
-      expense.expense_date ?? new Date().toISOString().split('T')[0],
+      expense.expense_date ?? todayISO(),
     status: expense.status,
     who_paid: expense.who_paid ?? '',
     notes: expense.notes ?? '',

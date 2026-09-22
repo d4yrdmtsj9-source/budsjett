@@ -1,4 +1,6 @@
 export interface Payment {
+  updated_at?: string
+  deleted_at?: string | null
   id: string
   amount: number
   kind: 'payment' | 'refund'
@@ -17,6 +19,9 @@ export interface ReceiptRef {
 }
 /** Optional fields let v1 snapshots load without fabricating historical estimates. */
 export interface FinanceFields {
+  delivery_status?: 'waiting' | 'received' | 'not_required'
+  delivery_date?: string | null
+  payment_schedule?: { id: string; date: string; amount: number; label: string }[]
   original_estimate?: number | null
   price_known?: boolean
   payments?: Payment[]

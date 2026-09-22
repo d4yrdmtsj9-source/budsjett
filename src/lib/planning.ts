@@ -1,8 +1,13 @@
 export interface ProjectTask {
+  depends_on?: string[]
+  expense_ids?: string[]
+  blocked_reason?: string
+  priority?: boolean
+  sort_order?: number
   id: string
   title: string
   room_id: string | null
-  status: 'todo' | 'doing' | 'done'
+  status: 'todo' | 'doing' | 'blocked' | 'done'
   due_date: string
   owner_id: string | null
   milestone: boolean
@@ -147,9 +152,14 @@ export function validPlanningData(data: {
         (t) =>
           base(t) &&
           typeof t.notes === 'string' &&
+          (t.depends_on === undefined || (Array.isArray(t.depends_on) && t.depends_on.every(x => typeof x === 'string'))) &&
+          (t.expense_ids === undefined || (Array.isArray(t.expense_ids) && t.expense_ids.every(x => typeof x === 'string'))) &&
+          (t.priority === undefined || typeof t.priority === 'boolean') &&
+          (t.sort_order === undefined || (typeof t.sort_order === 'number' && Number.isFinite(t.sort_order))) &&
+          (t.blocked_reason === undefined || typeof t.blocked_reason === 'string') &&
           typeof t.due_date === 'string' &&
           typeof t.milestone === 'boolean' &&
-          ['todo', 'doing', 'done'].includes(String(t.status)),
+          ['todo', 'doing', 'blocked', 'done'].includes(String(t.status)),
       ))
   )
     return false
